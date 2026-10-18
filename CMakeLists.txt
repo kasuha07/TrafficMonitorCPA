@@ -57,7 +57,7 @@ add_library(CPAQuota SHARED
 )
 target_include_directories(CPAQuota SYSTEM PRIVATE third_party/TrafficMonitor)
 target_include_directories(CPAQuota PRIVATE ${CMAKE_CURRENT_BINARY_DIR})
-target_link_libraries(CPAQuota PRIVATE cpa_core winhttp crypt32)
+target_link_libraries(CPAQuota PRIVATE cpa_core winhttp crypt32 shell32)
 
 configure_file(src/version.h.in version.h @ONLY)
 

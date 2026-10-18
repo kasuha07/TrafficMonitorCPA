@@ -26,6 +26,7 @@ public:
     const wchar_t* GetItemValueText() const override { return value_.c_str(); }
     const wchar_t* GetItemValueSampleText() const override { return L"100%"; }
     int IsDrawResourceUsageGraph() const override { return 1; }
+    int OnMouseEvent(MouseEventType type, int x, int y, void* hWnd, int flag) override;
     float GetResourceUsageGraphValue() const override;
 
     // 仅在主线程（DataRequired）中调用。
@@ -53,9 +54,12 @@ public:
     const wchar_t* GetTooltipInfo() override;
     void OnExtenedInfo(ExtendedInfoIndex index, const wchar_t* data) override;
     void OnInitialize(ITrafficMonitor* app) override;
-    int GetCommandCount() override { return 1; }
+    int GetCommandCount() override { return 2; }
     const wchar_t* GetCommandName(int index) override;
     void OnPluginCommand(int index, void* hWnd, void* para) override;
+
+    // 在默认浏览器中打开 CPA 管理页面。
+    void OpenManagementPage();
 
 private:
     CpaPlugin();

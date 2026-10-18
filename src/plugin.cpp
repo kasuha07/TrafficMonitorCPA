@@ -1,6 +1,7 @@
 #include "plugin.h"
 
 #include <windows.h>
+#include <shellapi.h>
 
 #include <algorithm>
 #include <ctime>
@@ -55,6 +56,13 @@ std::wstring FormatClock(int64_t t)
 QuotaItem::QuotaItem(Provider provider, WindowKind window, const wchar_t* name, const wchar_t* id, const wchar_t* label)
     : provider_(provider), window_(window), name_(name), id_(id), label_(label)
 {
+}
+
+int QuotaItem::OnMouseEvent(MouseEventType type, int, int, void*, int)
+{
+    if (type != MT_DBCLICKED) return 0;
+    CpaPlugin::Instance().OpenManagementPage();
+    return 1;  // 已处理，主程序不再执行默认的双击动作
 }
 
 float QuotaItem::GetResourceUsageGraphValue() const
@@ -288,14 +296,29 @@ void CpaPlugin::OnInitialize(ITrafficMonitor* app)
 
 const wchar_t* CpaPlugin::GetCommandName(int index)
 {
-    return index == 0 ? L"立即刷新额度" : nullptr;
+    switch (index) {
+    case 0: return L"立即刷新额度";
+    case 1: return L"打开 CPA 管理页面";
+    default: return nullptr;
+    }
 }
 
 void CpaPlugin::OnPluginCommand(int index, void*, void*)
 {
-    if (index != 0) return;
     EnsureConfigLoaded();
-    StartFetchIfDue(true);
+    if (index == 0) StartFetchIfDue(true);
+    else if (index == 1) OpenManagementPage();
+}
+
+void CpaPlugin::OpenManagementPage()
+{
+    EnsureConfigLoaded();
+    std::wstring url = config_.base_url;
+    // 只打开 http(s) 地址，避免把配置内容当作任意命令交给 ShellExecute。
+    if (url.rfind(L"http://", 0) != 0 && url.rfind(L"https://", 0) != 0) return;
+    while (!url.empty() && url.back() == L'/') url.pop_back();
+    url += L"/management.html";
+    ShellExecuteW(nullptr, L"open", url.c_str(), nullptr, nullptr, SW_SHOWNORMAL);
 }
 
 } // namespace cpa
