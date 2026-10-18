@@ -58,6 +58,9 @@ bool ReadInputs(HWND dlg, Config& out)
         return false;
     }
     out.alert_threshold = threshold;
+
+    out.show_used = IsDlgButtonChecked(dlg, IDC_SHOW_USED) == BST_CHECKED;
+    out.show_countdown = IsDlgButtonChecked(dlg, IDC_SHOW_COUNTDOWN) == BST_CHECKED;
     return true;
 }
 
@@ -78,6 +81,8 @@ INT_PTR CALLBACK DialogProc(HWND dlg, UINT msg, WPARAM wp, LPARAM lp)
             SendDlgItemMessageW(dlg, IDC_AGGREGATE, CB_ADDSTRING, 0, reinterpret_cast<LPARAM>(text));
         SendDlgItemMessageW(dlg, IDC_AGGREGATE, CB_SETCURSEL, static_cast<WPARAM>(config->aggregate), 0);
         SetDlgItemTextW(dlg, IDC_ALERT, std::to_wstring(config->alert_threshold).c_str());
+        CheckDlgButton(dlg, IDC_SHOW_USED, config->show_used ? BST_CHECKED : BST_UNCHECKED);
+        CheckDlgButton(dlg, IDC_SHOW_COUNTDOWN, config->show_countdown ? BST_CHECKED : BST_UNCHECKED);
         SetDlgItemTextW(dlg, IDC_STATUS,
                         L"管理密钥即 CPA 配置中的 remote-management.secret-key。\r\n"
                         L"注意：CPA 对连续 5 次密钥错误会封禁 IP 30 分钟。");

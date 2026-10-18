@@ -21,6 +21,11 @@ struct Config
 
     AggregateMode aggregate = AggregateMode::Min;
 
+    // 任务栏/鼠标提示显示已用百分比而不是剩余百分比。
+    bool show_used = false;
+    // 任务栏数值后附带重置倒计时，如 "82% 4h"。
+    bool show_countdown = false;
+
     // 低额度提醒阈值（%）；0 表示关闭。
     unsigned alert_threshold = 10;
 

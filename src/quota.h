@@ -77,6 +77,7 @@ struct AggregateResult
     int total = 0;          // 参与汇总的账号数（剩余未知的不计入）
     int available = 0;      // 剩余未用尽（四舍五入后 > 0%）的账号数
     double percent = -1;    // Min / Average / Max 的结果；没有数据时为 -1
+    int index = -1;         // Min / Max 选中的输入下标；其他模式为 -1
 };
 
 AggregateResult Aggregate(const std::vector<double>& remaining_percents, AggregateMode mode);
@@ -136,5 +137,8 @@ std::optional<int64_t> NormalizeUnix(double v);
 
 // 剩余时长的紧凑表示，如 "2h13m"、"3d4h"、"45m"。
 std::wstring FormatDuration(int64_t seconds);
+
+// 任务栏用的更短表示，只保留最大单位（小时、天向下取整），如 "4h"、"3d"、"45m"。
+std::wstring FormatDurationShort(int64_t seconds);
 
 } // namespace cpa

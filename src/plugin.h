@@ -24,13 +24,13 @@ public:
     const wchar_t* GetItemId() const override { return id_; }
     const wchar_t* GetItemLableText() const override { return label_; }
     const wchar_t* GetItemValueText() const override { return value_.c_str(); }
-    const wchar_t* GetItemValueSampleText() const override { return L"100%"; }
+    const wchar_t* GetItemValueSampleText() const override { return sample_; }
     int IsDrawResourceUsageGraph() const override { return 1; }
     int OnMouseEvent(MouseEventType type, int x, int y, void* hWnd, int flag) override;
     float GetResourceUsageGraphValue() const override;
 
     // 仅在主线程（DataRequired）中调用。
-    void Update(const Snapshot* snapshot, AggregateMode mode);
+    void Update(const Snapshot* snapshot, const Config& config);
 
 private:
     Provider provider_;
@@ -39,6 +39,7 @@ private:
     const wchar_t* id_;
     const wchar_t* label_;
     std::wstring value_{L"--"};
+    const wchar_t* sample_ = L"100%";  // 决定显示宽度，随倒计时设置变化
     double graph_ = -1;     // 资源占用图的值（0~1）；-1 表示无数据
 };
 

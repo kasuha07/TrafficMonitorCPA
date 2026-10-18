@@ -112,19 +112,19 @@ AggregateResult Aggregate(const std::vector<double>& remaining_percents, Aggrega
 {
     AggregateResult r;
     double sum = 0;
-    for (double p : remaining_percents) {
+    for (size_t i = 0; i < remaining_percents.size(); ++i) {
+        double p = remaining_percents[i];
         if (p < 0) continue;
         ++r.total;
         if (p >= 0.5) ++r.available;
         sum += p;
-        if (r.percent < 0) {
+        if (r.percent < 0 || (mode == AggregateMode::Min && p < r.percent) ||
+            (mode == AggregateMode::Max && p > r.percent)) {
             r.percent = p;
-        } else if (mode == AggregateMode::Min) {
-            r.percent = std::min(r.percent, p);
-        } else if (mode == AggregateMode::Max) {
-            r.percent = std::max(r.percent, p);
+            r.index = static_cast<int>(i);
         }
     }
+    if (mode != AggregateMode::Min && mode != AggregateMode::Max) r.index = -1;
     if (r.total > 0 && mode == AggregateMode::Average) r.percent = sum / r.total;
     return r;
 }
@@ -642,6 +642,16 @@ std::wstring FormatDuration(int64_t seconds)
     if (days > 0) return std::to_wstring(days) + L"d" + std::to_wstring(hours) + L"h";
     if (hours > 0) return std::to_wstring(hours) + L"h" + std::to_wstring(mins) + L"m";
     return std::to_wstring(mins) + L"m";
+}
+
+std::wstring FormatDurationShort(int64_t seconds)
+{
+    if (seconds <= 0) return L"0m";
+    int64_t minutes = (seconds + 59) / 60;
+    if (minutes < 60) return std::to_wstring(minutes) + L"m";
+    int64_t hours = minutes / 60;
+    if (hours < 24) return std::to_wstring(hours) + L"h";
+    return std::to_wstring(hours / 24) + L"d";
 }
 
 } // namespace cpa

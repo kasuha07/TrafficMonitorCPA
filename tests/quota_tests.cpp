@@ -56,6 +56,14 @@ static void TestDuration()
     CHECK(FormatDuration(59) == L"1m");
     CHECK(FormatDuration(2 * 3600 + 13 * 60) == L"2h13m");
     CHECK(FormatDuration(3 * 86400 + 4 * 3600 + 30) == L"3d4h");
+
+    CHECK(FormatDurationShort(0) == L"0m");
+    CHECK(FormatDurationShort(45 * 60) == L"45m");
+    CHECK(FormatDurationShort(59 * 60 + 1) == L"1h");
+    CHECK(FormatDurationShort(2 * 3600 + 13 * 60) == L"2h");
+    CHECK(FormatDurationShort(23 * 3600 + 59 * 60) == L"23h");
+    CHECK(FormatDurationShort(24 * 3600) == L"1d");
+    CHECK(FormatDurationShort(6 * 86400 + 13 * 3600) == L"6d");
 }
 
 static void TestCredentials()
@@ -320,6 +328,9 @@ static void TestAggregate()
     CHECK(min.total == 4);
     CHECK(min.available == 3);  // 0.2% 四舍五入为 0%，视为用尽
     CHECK_NEAR(min.percent, 0.2);
+    CHECK(min.index == 3);
+    CHECK(Aggregate(v, AggregateMode::Max).index == 0);
+    CHECK(Aggregate(v, AggregateMode::Average).index == -1);
     CHECK_NEAR(Aggregate(v, AggregateMode::Max).percent, 80.0);
     CHECK_NEAR(Aggregate(v, AggregateMode::Average).percent, (80 + 20 + 0.2 + 50) / 4);
     auto none = Aggregate({-1, -1}, AggregateMode::Average);

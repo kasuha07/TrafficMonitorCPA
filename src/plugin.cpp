@@ -29,11 +29,12 @@ std::wstring FormatPercent(double remaining)
     return std::to_wstring(static_cast<int>(remaining + 0.5)) + L"%";
 }
 
-std::wstring FormatWindow(const QuotaWindow& w, const wchar_t* name, int64_t now)
+std::wstring FormatWindow(const QuotaWindow& w, const wchar_t* name, int64_t now, bool used)
 {
     if (!w.present) return {};
     std::wstring s = (w.monthly ? L"30d" : name);
-    s += L" " + FormatPercent(w.RemainingPercent());
+    double remaining = w.RemainingPercent();
+    s += L" " + FormatPercent(used && remaining >= 0 ? 100.0 - remaining : remaining);
     if (w.reset_at > now) s += L" (" + FormatDuration(w.reset_at - now) + L")";
     return s;
 }
@@ -70,12 +71,19 @@ float QuotaItem::GetResourceUsageGraphValue() const
     return graph_ < 0 ? 0.0f : static_cast<float>(graph_);
 }
 
-void QuotaItem::Update(const Snapshot* snapshot, AggregateMode mode)
+void QuotaItem::Update(const Snapshot* snapshot, const Config& config)
 {
+    const AggregateMode mode = config.aggregate;
+    sample_ = config.show_countdown ? L"100% 23h" : L"100%";
+
     std::vector<double> remaining;
+    std::vector<int64_t> resets;
     if (snapshot && snapshot->ok) {
         for (const AccountQuota& q : snapshot->accounts) {
-            if (q.account.provider == provider_ && q.ok) remaining.push_back(WindowOf(q, window_).RemainingPercent());
+            if (q.account.provider != provider_ || !q.ok) continue;
+            const QuotaWindow& w = WindowOf(q, window_);
+            remaining.push_back(w.RemainingPercent());
+            resets.push_back(w.reset_at);
         }
     }
 
@@ -83,12 +91,29 @@ void QuotaItem::Update(const Snapshot* snapshot, AggregateMode mode)
     if (r.total == 0) {
         graph_ = -1;
         value_ = L"--";
-    } else if (mode == AggregateMode::AvailableCount) {
+        return;
+    }
+    if (mode == AggregateMode::AvailableCount) {
         graph_ = static_cast<double>(r.available) / r.total;
         value_ = std::to_wstring(r.available) + L"/" + std::to_wstring(r.total);
     } else {
+        // 资源占用图始终表示剩余比例，只有文字随「已用」设置变化。
         graph_ = r.percent / 100.0;
-        value_ = FormatPercent(r.percent);
+        value_ = FormatPercent(config.show_used ? 100.0 - r.percent : r.percent);
+    }
+
+    if (config.show_countdown) {
+        // 最低/最高取所显示账号的重置时间；平均/账号数取最早的重置时间。
+        const int64_t now = static_cast<int64_t>(std::time(nullptr));
+        int64_t reset = 0;
+        if (r.index >= 0) {
+            reset = resets[static_cast<size_t>(r.index)];
+        } else {
+            for (size_t i = 0; i < resets.size(); ++i) {
+                if (remaining[i] >= 0 && resets[i] > now && (reset == 0 || resets[i] < reset)) reset = resets[i];
+            }
+        }
+        if (reset > now) value_ += L" " + FormatDurationShort(reset - now);
     }
 }
 
@@ -146,7 +171,7 @@ void CpaPlugin::DataRequired()
     if (fresh) {
         shown_ = std::move(fresh);
         if (shown_->auth_rejected) paused_ = true;
-        for (QuotaItem& item : items_) item.Update(shown_.get(), config_.aggregate);
+        for (QuotaItem& item : items_) item.Update(shown_.get(), config_);
         if (shown_->ok) NotifyLowQuota(*shown_);
     }
 
@@ -207,7 +232,7 @@ ITMPlugin::OptionReturn CpaPlugin::ShowOptionsDialog(void* hParent)
         pending_.reset();
     }
     shown_.reset();
-    for (QuotaItem& item : items_) item.Update(nullptr, config_.aggregate);
+    for (QuotaItem& item : items_) item.Update(nullptr, config_);
     StartFetchIfDue(true);
     return OR_OPTION_CHANGED;
 }
@@ -231,7 +256,8 @@ std::wstring CpaPlugin::BuildTooltip() const
     if (!shown_) return L"CPA 额度：正在获取…";
 
     const Snapshot& s = *shown_;
-    std::wstring tip = L"CPA 额度（更新于 " + FormatClock(s.fetched_at) + L"）";
+    std::wstring tip = std::wstring(config_.show_used ? L"CPA 额度已用" : L"CPA 额度") + L"（更新于 " +
+                       FormatClock(s.fetched_at) + L"）";
     if (!s.ok) {
         tip += L"\n" + s.error;
         if (paused_) tip += L"\n已暂停自动刷新，请检查插件选项中的管理密钥";
@@ -239,9 +265,10 @@ std::wstring CpaPlugin::BuildTooltip() const
     }
 
     int64_t now = static_cast<int64_t>(std::time(nullptr));
-    auto windows = [now](const QuotaWindow& five_hour, const QuotaWindow& weekly) {
-        std::wstring five = FormatWindow(five_hour, L"5h", now);
-        std::wstring week = FormatWindow(weekly, L"7d", now);
+    const bool used = config_.show_used;
+    auto windows = [now, used](const QuotaWindow& five_hour, const QuotaWindow& weekly) {
+        std::wstring five = FormatWindow(five_hour, L"5h", now, used);
+        std::wstring week = FormatWindow(weekly, L"7d", now, used);
         return five + (!five.empty() && !week.empty() ? L" · " : L"") + week;
     };
 

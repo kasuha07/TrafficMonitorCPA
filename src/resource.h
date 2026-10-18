@@ -12,3 +12,5 @@
 #define IDC_ENABLE_ANTIGRAVITY  1008
 #define IDC_AGGREGATE           1009
 #define IDC_ALERT               1010
+#define IDC_SHOW_USED           1011
+#define IDC_SHOW_COUNTDOWN      1012
