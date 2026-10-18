@@ -91,6 +91,8 @@ Config LoadConfig(const std::wstring& ini_path)
     c.enable_codex = GetPrivateProfileIntW(kSection, L"EnableCodex", 1, ini_path.c_str()) != 0;
     c.enable_claude = GetPrivateProfileIntW(kSection, L"EnableClaude", 1, ini_path.c_str()) != 0;
     c.enable_antigravity = GetPrivateProfileIntW(kSection, L"EnableAntigravity", 1, ini_path.c_str()) != 0;
+    UINT aggregate = GetPrivateProfileIntW(kSection, L"Aggregate", 0, ini_path.c_str());
+    c.aggregate = aggregate <= 3 ? static_cast<AggregateMode>(aggregate) : AggregateMode::Min;
     return c;
 }
 
@@ -108,7 +110,9 @@ bool SaveConfig(const std::wstring& ini_path, const Config& config, std::wstring
               WritePrivateProfileStringW(kSection, L"RefreshSeconds", refresh.c_str(), ini_path.c_str()) &&
               WritePrivateProfileStringW(kSection, L"EnableCodex", flag(config.enable_codex), ini_path.c_str()) &&
               WritePrivateProfileStringW(kSection, L"EnableClaude", flag(config.enable_claude), ini_path.c_str()) &&
-              WritePrivateProfileStringW(kSection, L"EnableAntigravity", flag(config.enable_antigravity), ini_path.c_str());
+              WritePrivateProfileStringW(kSection, L"EnableAntigravity", flag(config.enable_antigravity), ini_path.c_str()) &&
+              WritePrivateProfileStringW(kSection, L"Aggregate", std::to_wstring(static_cast<int>(config.aggregate)).c_str(),
+                                         ini_path.c_str());
     if (!ok && error) *error = L"无法写入配置文件: " + ini_path;
     return ok;
 }

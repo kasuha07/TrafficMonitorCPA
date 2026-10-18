@@ -264,8 +264,23 @@ static void TestAntigravity()
     CHECK(!ParseAntigravityQuota(R"({"groups":[{"displayName":"X","buckets":[{"window":"daily","remainingFraction":1}]}]})", none, &err));
 }
 
+static void TestAggregate()
+{
+    const std::vector<double> v = {80, -1, 20, 0.2, 50};
+    auto min = Aggregate(v, AggregateMode::Min);
+    CHECK(min.total == 4);
+    CHECK(min.available == 3);  // 0.2% 四舍五入为 0%，视为用尽
+    CHECK_NEAR(min.percent, 0.2);
+    CHECK_NEAR(Aggregate(v, AggregateMode::Max).percent, 80.0);
+    CHECK_NEAR(Aggregate(v, AggregateMode::Average).percent, (80 + 20 + 0.2 + 50) / 4);
+    auto none = Aggregate({-1, -1}, AggregateMode::Average);
+    CHECK(none.total == 0);
+    CHECK(none.percent < 0);
+}
+
 int main()
 {
+    TestAggregate();
     TestAntigravity();
     TestJson();
     TestIso8601();

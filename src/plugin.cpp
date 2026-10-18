@@ -59,20 +59,29 @@ QuotaItem::QuotaItem(Provider provider, WindowKind window, const wchar_t* name, 
 
 float QuotaItem::GetResourceUsageGraphValue() const
 {
-    return remaining_ < 0 ? 0.0f : static_cast<float>(remaining_ / 100.0);
+    return graph_ < 0 ? 0.0f : static_cast<float>(graph_);
 }
 
-void QuotaItem::Update(const Snapshot* snapshot)
+void QuotaItem::Update(const Snapshot* snapshot, AggregateMode mode)
 {
-    remaining_ = -1;
+    std::vector<double> remaining;
     if (snapshot && snapshot->ok) {
         for (const AccountQuota& q : snapshot->accounts) {
-            if (q.account.provider != provider_ || !q.ok) continue;
-            double r = WindowOf(q, window_).RemainingPercent();
-            if (r >= 0 && (remaining_ < 0 || r < remaining_)) remaining_ = r;
+            if (q.account.provider == provider_ && q.ok) remaining.push_back(WindowOf(q, window_).RemainingPercent());
         }
     }
-    value_ = FormatPercent(remaining_);
+
+    AggregateResult r = Aggregate(remaining, mode);
+    if (r.total == 0) {
+        graph_ = -1;
+        value_ = L"--";
+    } else if (mode == AggregateMode::AvailableCount) {
+        graph_ = static_cast<double>(r.available) / r.total;
+        value_ = std::to_wstring(r.available) + L"/" + std::to_wstring(r.total);
+    } else {
+        graph_ = r.percent / 100.0;
+        value_ = FormatPercent(r.percent);
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -129,7 +138,7 @@ void CpaPlugin::DataRequired()
     if (fresh) {
         shown_ = std::move(fresh);
         if (shown_->auth_rejected) paused_ = true;
-        for (QuotaItem& item : items_) item.Update(shown_.get());
+        for (QuotaItem& item : items_) item.Update(shown_.get(), config_.aggregate);
     }
 
     StartFetchIfDue(false);
@@ -179,7 +188,7 @@ ITMPlugin::OptionReturn CpaPlugin::ShowOptionsDialog(void* hParent)
         pending_.reset();
     }
     shown_.reset();
-    for (QuotaItem& item : items_) item.Update(nullptr);
+    for (QuotaItem& item : items_) item.Update(nullptr, config_.aggregate);
     StartFetchIfDue(true);
     return OR_OPTION_CHANGED;
 }

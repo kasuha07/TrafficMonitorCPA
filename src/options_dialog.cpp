@@ -47,6 +47,9 @@ bool ReadInputs(HWND dlg, Config& out)
         SetDlgItemTextW(dlg, IDC_STATUS, L"至少需要启用一种账号类型");
         return false;
     }
+
+    LRESULT sel = SendDlgItemMessageW(dlg, IDC_AGGREGATE, CB_GETCURSEL, 0, 0);
+    out.aggregate = sel >= 0 && sel <= 3 ? static_cast<AggregateMode>(sel) : AggregateMode::Min;
     return true;
 }
 
@@ -62,6 +65,10 @@ INT_PTR CALLBACK DialogProc(HWND dlg, UINT msg, WPARAM wp, LPARAM lp)
         CheckDlgButton(dlg, IDC_ENABLE_CODEX, config->enable_codex ? BST_CHECKED : BST_UNCHECKED);
         CheckDlgButton(dlg, IDC_ENABLE_CLAUDE, config->enable_claude ? BST_CHECKED : BST_UNCHECKED);
         CheckDlgButton(dlg, IDC_ENABLE_ANTIGRAVITY, config->enable_antigravity ? BST_CHECKED : BST_UNCHECKED);
+        // 顺序与 AggregateMode 的取值一致。
+        for (const wchar_t* text : {L"最低（剩余最少的账号）", L"平均", L"最高（剩余最多的账号）", L"可用账号数（如 3/5）"})
+            SendDlgItemMessageW(dlg, IDC_AGGREGATE, CB_ADDSTRING, 0, reinterpret_cast<LPARAM>(text));
+        SendDlgItemMessageW(dlg, IDC_AGGREGATE, CB_SETCURSEL, static_cast<WPARAM>(config->aggregate), 0);
         SetDlgItemTextW(dlg, IDC_STATUS,
                         L"管理密钥即 CPA 配置中的 remote-management.secret-key。\r\n"
                         L"注意：CPA 对连续 5 次密钥错误会封禁 IP 30 分钟。");

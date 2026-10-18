@@ -69,6 +69,18 @@ struct AccountQuota
 
 Provider ParseProvider(std::string_view raw);
 
+// 任务栏显示项如何汇总同类多个账号的剩余百分比。数值与 ini 中保存的值一致，不要调整顺序。
+enum class AggregateMode { Min = 0, Average = 1, Max = 2, AvailableCount = 3 };
+
+struct AggregateResult
+{
+    int total = 0;          // 参与汇总的账号数（剩余未知的不计入）
+    int available = 0;      // 剩余未用尽（四舍五入后 > 0%）的账号数
+    double percent = -1;    // Min / Average / Max 的结果；没有数据时为 -1
+};
+
+AggregateResult Aggregate(const std::vector<double>& remaining_percents, AggregateMode mode);
+
 // 解析 GET /v8/management/credentials 的响应，只保留支持的账号类型。
 std::optional<std::vector<Account>> ParseCredentials(std::string_view body, std::string* error);
 

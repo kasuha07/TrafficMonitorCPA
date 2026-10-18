@@ -108,6 +108,27 @@ double QuotaWindow::RemainingPercent() const
     return std::clamp(100.0 - used_percent, 0.0, 100.0);
 }
 
+AggregateResult Aggregate(const std::vector<double>& remaining_percents, AggregateMode mode)
+{
+    AggregateResult r;
+    double sum = 0;
+    for (double p : remaining_percents) {
+        if (p < 0) continue;
+        ++r.total;
+        if (p >= 0.5) ++r.available;
+        sum += p;
+        if (r.percent < 0) {
+            r.percent = p;
+        } else if (mode == AggregateMode::Min) {
+            r.percent = std::min(r.percent, p);
+        } else if (mode == AggregateMode::Max) {
+            r.percent = std::max(r.percent, p);
+        }
+    }
+    if (r.total > 0 && mode == AggregateMode::Average) r.percent = sum / r.total;
+    return r;
+}
+
 std::string Account::DisplayName() const
 {
     if (!email.empty()) return email;

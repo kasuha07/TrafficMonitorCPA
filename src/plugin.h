@@ -28,7 +28,7 @@ public:
     float GetResourceUsageGraphValue() const override;
 
     // 仅在主线程（DataRequired）中调用。
-    void Update(const Snapshot* snapshot);
+    void Update(const Snapshot* snapshot, AggregateMode mode);
 
 private:
     Provider provider_;
@@ -37,7 +37,7 @@ private:
     const wchar_t* id_;
     const wchar_t* label_;
     std::wstring value_{L"--"};
-    double remaining_ = -1;
+    double graph_ = -1;     // 资源占用图的值（0~1）；-1 表示无数据
 };
 
 class CpaPlugin final : public ITMPlugin

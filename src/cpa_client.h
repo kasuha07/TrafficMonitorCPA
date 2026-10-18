@@ -19,6 +19,8 @@ struct Config
     bool enable_claude = true;
     bool enable_antigravity = true;
 
+    AggregateMode aggregate = AggregateMode::Min;
+
     bool IsEnabled(Provider p) const
     {
         switch (p) {
