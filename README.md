@@ -66,7 +66,7 @@ ctest --test-dir build/x64 -C Release --output-on-failure
 
 ## CI 与发布
 
-GitHub Actions（`.github/workflows/build.yml`）在推送到 `main` 和 Pull Request 时编译 x64 / x86 并运行测试，产物可在 Actions 运行页下载。
+GitHub Actions（`.github/workflows/build.yml`）只在发布 Release 时运行（也可在 Actions 页手动触发一次编译，产物在运行页下载），普通 push 不会触发。
 
 在 GitHub 上发布 Release（标签形如 `v1.2.3`）后，工作流会以该版本号编译，并把 `CPAQuota-1.2.3-x64.zip`、`CPAQuota-1.2.3-x86.zip` 附加到该 Release。GitHub 会在 Release 页面为每个附件显示 SHA-256 摘要，下载后可这样校验：
 
