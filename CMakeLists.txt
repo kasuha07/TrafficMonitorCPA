@@ -1,7 +1,7 @@
 cmake_minimum_required(VERSION 3.25)
 
 # Release builds pass -DCPA_VERSION=<tag without "v">.
-set(CPA_VERSION "0.2.0" CACHE STRING "Plugin version (MAJOR.MINOR.PATCH)")
+set(CPA_VERSION "0.3.0" CACHE STRING "Plugin version (MAJOR.MINOR.PATCH)")
 if(NOT CPA_VERSION MATCHES "^[0-9]+\\.[0-9]+\\.[0-9]+$")
     message(FATAL_ERROR "CPA_VERSION must be MAJOR.MINOR.PATCH, got '${CPA_VERSION}'")
 endif()
