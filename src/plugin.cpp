@@ -33,7 +33,7 @@ std::wstring FormatWindow(const QuotaWindow& w, const wchar_t* name, int64_t now
     if (!w.present) return {};
     std::wstring s = (w.monthly ? L"30d" : name);
     s += L" " + FormatPercent(w.RemainingPercent());
-    if (w.reset_at > now) s += L" (" + FormatDuration(w.reset_at - now) + L"后重置)";
+    if (w.reset_at > now) s += L" (" + FormatDuration(w.reset_at - now) + L")";
     return s;
 }
 
