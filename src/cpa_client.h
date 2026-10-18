@@ -12,7 +12,7 @@ struct Config
 {
     std::wstring base_url = L"http://127.0.0.1:8317";
     std::wstring management_key;
-    unsigned refresh_seconds = 60;
+    unsigned refresh_seconds = 300;
 
     // 未启用的账号类型不会请求上游，也不会出现在任务栏和鼠标提示中。
     bool enable_codex = true;

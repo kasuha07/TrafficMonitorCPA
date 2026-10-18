@@ -86,7 +86,7 @@ Config LoadConfig(const std::wstring& ini_path)
     std::wstring url = ReadString(ini_path, L"BaseUrl", L"");
     if (!url.empty()) c.base_url = url;
     c.management_key = Unprotect(ReadString(ini_path, L"ManagementKey", L""));
-    UINT refresh = GetPrivateProfileIntW(kSection, L"RefreshSeconds", 60, ini_path.c_str());
+    UINT refresh = GetPrivateProfileIntW(kSection, L"RefreshSeconds", 300, ini_path.c_str());
     c.refresh_seconds = refresh < 15 ? 15 : (refresh > 3600 ? 3600 : refresh);
     c.enable_codex = GetPrivateProfileIntW(kSection, L"EnableCodex", 1, ini_path.c_str()) != 0;
     c.enable_claude = GetPrivateProfileIntW(kSection, L"EnableClaude", 1, ini_path.c_str()) != 0;
