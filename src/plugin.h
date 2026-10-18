@@ -29,6 +29,12 @@ public:
     int OnMouseEvent(MouseEventType type, int x, int y, void* hWnd, int flag) override;
     float GetResourceUsageGraphValue() const override;
 
+    // 「按剩余比例变色」开启时由插件自绘：标签用 TrafficMonitor 的标签色，数值按剩余比例着色。
+    bool IsCustomDraw() const override;
+    int GetItemWidthEx(void* hDC) const override;
+    void DrawItem(void* hDC, int x, int y, int w, int h, bool dark_mode) override;
+    bool DrawItemEx(IPluginDrawer* drawer, int x, int y, int w, int h, bool dark_mode) override;
+
     // 仅在主线程（DataRequired）中调用。
     void Update(const Snapshot* snapshot, const Config& config);
 
@@ -41,7 +47,19 @@ private:
     std::wstring value_{L"--"};
     const wchar_t* sample_ = L"100%";  // 决定显示宽度，随倒计时设置变化
     double graph_ = -1;     // 资源占用图的值（0~1）；-1 表示无数据
+    bool drawn_ex_ = false; // 主程序支持 DrawItemEx 后不再用 GDI 重复绘制
 };
+
+// 自绘时使用的颜色（COLORREF），由 TrafficMonitor 在绘制前通过 OnExtenedInfo 传入。
+struct DrawColors
+{
+    unsigned long label = 0;
+    unsigned long value = 0;
+    bool known = false;
+};
+
+// 按剩余比例（0~100）返回数值颜色；不需要特殊着色时返回 fallback。
+unsigned long QuotaColor(double remaining_percent, bool dark_mode, unsigned long fallback);
 
 class CpaPlugin final : public ITMPlugin
 {
@@ -64,6 +82,9 @@ public:
     // 双击显示项：按设置打开管理页面或立即刷新。
     void OnItemDoubleClick();
 
+    bool ColorEnabled() const { return config_loaded_ && config_.color_by_quota; }
+    const DrawColors& Colors() const { return colors_; }
+
 private:
     CpaPlugin();
 
@@ -85,6 +106,7 @@ private:
     int64_t last_fetch_ = 0;
     bool paused_ = false;   // 管理密钥被拒绝后暂停自动刷新
     LowQuotaAlerts alerts_;
+    DrawColors colors_;
 
     // 后台线程与主线程之间的交接区。
     std::mutex mutex_;

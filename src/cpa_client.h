@@ -28,6 +28,8 @@ struct Config
     bool show_used = false;
     // 任务栏数值后附带重置倒计时，如 "82% 4h"。
     bool show_countdown = false;
+    // 按剩余比例给数值着色（插件自绘，此时 TrafficMonitor 中自定义的标签文字不生效）。
+    bool color_by_quota = false;
 
     DoubleClickAction double_click = DoubleClickAction::OpenManagementPage;
 

@@ -66,6 +66,75 @@ int QuotaItem::OnMouseEvent(MouseEventType type, int, int, void*, int)
     return 1;  // 已处理，主程序不再执行默认的双击动作
 }
 
+unsigned long QuotaColor(double remaining_percent, bool dark_mode, unsigned long fallback)
+{
+    if (remaining_percent < 0) return fallback;
+    if (remaining_percent < 10.5) return dark_mode ? RGB(255, 110, 110) : RGB(215, 40, 40);
+    if (remaining_percent < 30.5) return dark_mode ? RGB(255, 200, 70) : RGB(200, 130, 0);
+    return fallback;
+}
+
+bool QuotaItem::IsCustomDraw() const
+{
+    return CpaPlugin::Instance().ColorEnabled();
+}
+
+int QuotaItem::GetItemWidthEx(void* hDC) const
+{
+    std::wstring text = std::wstring(label_) + sample_;
+    SIZE size{};
+    if (!GetTextExtentPoint32W(static_cast<HDC>(hDC), text.c_str(), static_cast<int>(text.size()), &size)) return 0;
+    return size.cx;
+}
+
+namespace {
+
+// 按剩余比例着色时，数值颜色取决于剩余比例；资源占用图的值即剩余比例（账号数模式为可用比例）。
+void ResolveColors(double graph, bool dark_mode, unsigned long& label, unsigned long& value)
+{
+    const DrawColors& c = CpaPlugin::Instance().Colors();
+    unsigned long fallback = dark_mode ? RGB(255, 255, 255) : RGB(0, 0, 0);
+    label = c.known ? c.label : fallback;
+    unsigned long base = c.known ? c.value : fallback;
+    value = QuotaColor(graph < 0 ? -1 : graph * 100.0, dark_mode, base);
+}
+
+} // namespace
+
+void QuotaItem::DrawItem(void* hDC, int x, int y, int w, int h, bool dark_mode)
+{
+    if (drawn_ex_) return;  // 新版 TrafficMonitor 随后会调用 DrawItemEx
+    HDC dc = static_cast<HDC>(hDC);
+    unsigned long label_color = 0, value_color = 0;
+    ResolveColors(graph_, dark_mode, label_color, value_color);
+
+    RECT rect{x, y, x + w, y + h};
+    int old_mode = SetBkMode(dc, TRANSPARENT);
+    COLORREF old_color = SetTextColor(dc, label_color);
+    DrawTextW(dc, label_, -1, &rect, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_NOPREFIX);
+    SIZE label_size{};
+    GetTextExtentPoint32W(dc, label_, static_cast<int>(wcslen(label_)), &label_size);
+    rect.left += label_size.cx;
+    SetTextColor(dc, value_color);
+    DrawTextW(dc, value_.c_str(), -1, &rect, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_NOPREFIX);
+    SetTextColor(dc, old_color);
+    SetBkMode(dc, old_mode);
+}
+
+bool QuotaItem::DrawItemEx(IPluginDrawer* drawer, int x, int y, int w, int h, bool dark_mode)
+{
+    if (!drawer) return false;
+    drawn_ex_ = true;
+    unsigned long label_color = 0, value_color = 0;
+    ResolveColors(graph_, dark_mode, label_color, value_color);
+
+    int label_w = 0, label_h = 0;
+    drawer->GetTextExtent(label_, label_w, label_h);
+    drawer->DrawWindowText(x, y, label_w, h, label_, label_color);
+    drawer->DrawWindowText(x + label_w, y, w - label_w, h, value_.c_str(), value_color);
+    return true;
+}
+
 float QuotaItem::GetResourceUsageGraphValue() const
 {
     return graph_ < 0 ? 0.0f : static_cast<float>(graph_);
@@ -326,6 +395,11 @@ const wchar_t* CpaPlugin::GetTooltipInfo()
 void CpaPlugin::OnExtenedInfo(ExtendedInfoIndex index, const wchar_t* data)
 {
     if (index == EI_CONFIG_DIR && data && *data && config_dir_.empty()) config_dir_ = data;
+    if (index == EI_LABEL_TEXT_COLOR && data) {
+        colors_.label = static_cast<unsigned long>(_wtoi64(data));
+        colors_.known = true;
+    }
+    if (index == EI_VALUE_TEXT_COLOR && data) colors_.value = static_cast<unsigned long>(_wtoi64(data));
 }
 
 void CpaPlugin::OnInitialize(ITrafficMonitor* app)

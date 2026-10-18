@@ -17,3 +17,4 @@
 #define IDC_SKIP_TLS_VERIFY     1013
 #define IDC_SMART_COOLDOWN      1014
 #define IDC_DOUBLE_CLICK        1015
+#define IDC_COLOR_BY_QUOTA      1016
