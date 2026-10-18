@@ -21,6 +21,9 @@ struct Config
 
     AggregateMode aggregate = AggregateMode::Min;
 
+    // 低额度提醒阈值（%）；0 表示关闭。
+    unsigned alert_threshold = 10;
+
     bool IsEnabled(Provider p) const
     {
         switch (p) {

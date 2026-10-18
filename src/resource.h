@@ -11,3 +11,4 @@
 #define IDC_ENABLE_CLAUDE       1007
 #define IDC_ENABLE_ANTIGRAVITY  1008
 #define IDC_AGGREGATE           1009
+#define IDC_ALERT               1010

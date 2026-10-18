@@ -4,6 +4,7 @@
 #include <cstdio>
 #include <string>
 
+#include "alerts.h"
 #include "json.h"
 #include "quota.h"
 
@@ -264,6 +265,54 @@ static void TestAntigravity()
     CHECK(!ParseAntigravityQuota(R"({"groups":[{"displayName":"X","buckets":[{"window":"daily","remainingFraction":1}]}]})", none, &err));
 }
 
+static AccountQuota MakeQuota(Provider p, const char* index, double used5h, double used7d)
+{
+    AccountQuota q;
+    q.ok = true;
+    q.account.provider = p;
+    q.account.auth_index = index;
+    q.account.email = std::string(index) + "@x.com";
+    q.five_hour = {true, used5h, 0, false};
+    q.weekly = {true, used7d, 0, false};
+    return q;
+}
+
+static void TestAlerts()
+{
+    LowQuotaAlerts alerts;
+    const int64_t now = 1792324800;
+    std::vector<AccountQuota> accounts = {MakeQuota(Provider::Codex, "a", 95, 50), MakeQuota(Provider::Claude, "b", 10, 10)};
+    accounts[0].five_hour.reset_at = now + 3600;
+
+    auto first = alerts.Check(accounts, 10, now);
+    CHECK(first.size() == 1);
+    CHECK(first[0] == L"Codex a@x.com 5h 剩余 5% (1h0m)");
+
+    // 仍低于阈值：不重复提醒
+    CHECK(alerts.Check(accounts, 10, now).empty());
+
+    // 获取失败不会清除状态
+    accounts[0].ok = false;
+    CHECK(alerts.Check(accounts, 10, now).empty());
+    accounts[0].ok = true;
+
+    // 回升后重新生效，再次跌破会再提醒
+    accounts[0].five_hour.used_percent = 0;
+    CHECK(alerts.Check(accounts, 10, now).empty());
+    accounts[0].five_hour.used_percent = 92;
+    CHECK(alerts.Check(accounts, 10, now).size() == 1);
+
+    // Antigravity 按分组检查
+    AccountQuota ag = MakeQuota(Provider::Antigravity, "g", 0, 0);
+    ag.groups = {{"Gemini", {true, 0, 0, false}, {true, 0, 0, false}}, {"Claude/GPT", {true, 99, 0, false}, {true, 0, 0, false}}};
+    auto ag_alerts = alerts.Check({ag}, 10, now);
+    CHECK(ag_alerts.size() == 1);
+    CHECK(ag_alerts[0] == L"Antigravity g@x.com Claude/GPT 5h 剩余 1%");
+
+    // 阈值 0 关闭
+    CHECK(alerts.Check(accounts, 0, now).empty());
+}
+
 static void TestAggregate()
 {
     const std::vector<double> v = {80, -1, 20, 0.2, 50};
@@ -281,6 +330,7 @@ static void TestAggregate()
 int main()
 {
     TestAggregate();
+    TestAlerts();
     TestAntigravity();
     TestJson();
     TestIso8601();

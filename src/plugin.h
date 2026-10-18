@@ -7,6 +7,7 @@
 #include <string>
 
 #include "PluginInterface.h"
+#include "alerts.h"
 #include "cpa_client.h"
 
 namespace cpa {
@@ -62,6 +63,7 @@ private:
     void EnsureConfigLoaded();
     std::wstring ConfigPath() const;
     void StartFetchIfDue(bool force);
+    void NotifyLowQuota(const Snapshot& snapshot);
     std::wstring BuildTooltip() const;
 
     ITrafficMonitor* app_{};
@@ -75,6 +77,7 @@ private:
     std::wstring tooltip_;
     int64_t last_fetch_ = 0;
     bool paused_ = false;   // 管理密钥被拒绝后暂停自动刷新
+    LowQuotaAlerts alerts_;
 
     // 后台线程与主线程之间的交接区。
     std::mutex mutex_;

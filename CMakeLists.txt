@@ -32,6 +32,8 @@ add_link_options("$<$<NOT:$<CONFIG:Debug>>:/LTCG;/OPT:REF;/OPT:ICF>")
 
 # Pure parsing logic, shared by the plugin and the unit tests.
 add_library(cpa_core STATIC
+    src/alerts.cpp
+    src/alerts.h
     src/json.cpp
     src/json.h
     src/quota.cpp

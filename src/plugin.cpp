@@ -139,9 +139,20 @@ void CpaPlugin::DataRequired()
         shown_ = std::move(fresh);
         if (shown_->auth_rejected) paused_ = true;
         for (QuotaItem& item : items_) item.Update(shown_.get(), config_.aggregate);
+        if (shown_->ok) NotifyLowQuota(*shown_);
     }
 
     StartFetchIfDue(false);
+}
+
+void CpaPlugin::NotifyLowQuota(const Snapshot& snapshot)
+{
+    auto messages = alerts_.Check(snapshot.accounts, static_cast<int>(config_.alert_threshold),
+                                  static_cast<int64_t>(std::time(nullptr)));
+    if (messages.empty() || !app_) return;
+    std::wstring text = L"CPA 额度不足";
+    for (const std::wstring& m : messages) text += L"\n" + m;
+    app_->ShowNotifyMessage(text.c_str());
 }
 
 void CpaPlugin::StartFetchIfDue(bool force)
