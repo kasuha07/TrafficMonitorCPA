@@ -122,12 +122,12 @@ void QuotaItem::Update(const Snapshot* snapshot, const Config& config)
 
 CpaPlugin::CpaPlugin()
     : items_{{
-          {Provider::Codex, WindowKind::FiveHour, L"CPA Codex 5h 剩余", L"CpaCodex5h", L"X5h: "},
-          {Provider::Codex, WindowKind::Weekly, L"CPA Codex 7d 剩余", L"CpaCodexWeek", L"X7d: "},
-          {Provider::Claude, WindowKind::FiveHour, L"CPA Claude 5h 剩余", L"CpaClaude5h", L"C5h: "},
-          {Provider::Claude, WindowKind::Weekly, L"CPA Claude 7d 剩余", L"CpaClaudeWeek", L"C7d: "},
-          {Provider::Antigravity, WindowKind::FiveHour, L"CPA Gemini 5h 剩余", L"CpaGemini5h", L"G5h: "},
-          {Provider::Antigravity, WindowKind::Weekly, L"CPA Gemini 7d 剩余", L"CpaGeminiWeek", L"G7d: "},
+          {Provider::Codex, WindowKind::FiveHour, L"CPA Codex 5h", L"CpaCodex5h", L"X5h: "},
+          {Provider::Codex, WindowKind::Weekly, L"CPA Codex 7d", L"CpaCodexWeek", L"X7d: "},
+          {Provider::Claude, WindowKind::FiveHour, L"CPA Claude 5h", L"CpaClaude5h", L"C5h: "},
+          {Provider::Claude, WindowKind::Weekly, L"CPA Claude 7d", L"CpaClaudeWeek", L"C7d: "},
+          {Provider::Antigravity, WindowKind::FiveHour, L"CPA Gemini 5h", L"CpaGemini5h", L"G5h: "},
+          {Provider::Antigravity, WindowKind::Weekly, L"CPA Gemini 7d", L"CpaGeminiWeek", L"G7d: "},
       }}
 {
 }
