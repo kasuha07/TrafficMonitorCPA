@@ -349,7 +349,7 @@ Snapshot FetchSnapshot(const Config& config)
     }
 
     for (Account& a : creds.accounts) {
-        if (a.disabled) continue;
+        if (a.disabled || !config.IsEnabled(a.provider)) continue;
         AccountQuota q;
         q.account = std::move(a);
         FetchAccountQuota(http, q, static_cast<int64_t>(std::time(nullptr)));

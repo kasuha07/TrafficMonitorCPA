@@ -39,6 +39,14 @@ bool ReadInputs(HWND dlg, Config& out)
         return false;
     }
     out.refresh_seconds = seconds;
+
+    out.enable_codex = IsDlgButtonChecked(dlg, IDC_ENABLE_CODEX) == BST_CHECKED;
+    out.enable_claude = IsDlgButtonChecked(dlg, IDC_ENABLE_CLAUDE) == BST_CHECKED;
+    out.enable_antigravity = IsDlgButtonChecked(dlg, IDC_ENABLE_ANTIGRAVITY) == BST_CHECKED;
+    if (!out.enable_codex && !out.enable_claude && !out.enable_antigravity) {
+        SetDlgItemTextW(dlg, IDC_STATUS, L"至少需要启用一种账号类型");
+        return false;
+    }
     return true;
 }
 
@@ -51,6 +59,9 @@ INT_PTR CALLBACK DialogProc(HWND dlg, UINT msg, WPARAM wp, LPARAM lp)
         SetDlgItemTextW(dlg, IDC_URL, config->base_url.c_str());
         SetDlgItemTextW(dlg, IDC_KEY, config->management_key.c_str());
         SetDlgItemTextW(dlg, IDC_REFRESH, std::to_wstring(config->refresh_seconds).c_str());
+        CheckDlgButton(dlg, IDC_ENABLE_CODEX, config->enable_codex ? BST_CHECKED : BST_UNCHECKED);
+        CheckDlgButton(dlg, IDC_ENABLE_CLAUDE, config->enable_claude ? BST_CHECKED : BST_UNCHECKED);
+        CheckDlgButton(dlg, IDC_ENABLE_ANTIGRAVITY, config->enable_antigravity ? BST_CHECKED : BST_UNCHECKED);
         SetDlgItemTextW(dlg, IDC_STATUS,
                         L"管理密钥即 CPA 配置中的 remote-management.secret-key。\r\n"
                         L"注意：CPA 对连续 5 次密钥错误会封禁 IP 30 分钟。");
@@ -71,7 +82,7 @@ INT_PTR CALLBACK DialogProc(HWND dlg, UINT msg, WPARAM wp, LPARAM lp)
         }
         case IDOK: {
             auto* config = reinterpret_cast<Config*>(GetWindowLongPtrW(dlg, DWLP_USER));
-            Config updated;
+            Config updated = *config;  // 保留对话框之外的字段
             if (!ReadInputs(dlg, updated)) return TRUE;
             *config = updated;
             EndDialog(dlg, IDOK);

@@ -13,6 +13,21 @@ struct Config
     std::wstring base_url = L"http://127.0.0.1:8317";
     std::wstring management_key;
     unsigned refresh_seconds = 60;
+
+    // 未启用的账号类型不会请求上游，也不会出现在任务栏和鼠标提示中。
+    bool enable_codex = true;
+    bool enable_claude = true;
+    bool enable_antigravity = true;
+
+    bool IsEnabled(Provider p) const
+    {
+        switch (p) {
+        case Provider::Codex: return enable_codex;
+        case Provider::Claude: return enable_claude;
+        case Provider::Antigravity: return enable_antigravity;
+        default: return false;
+        }
+    }
 };
 
 struct Snapshot

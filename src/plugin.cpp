@@ -243,7 +243,7 @@ std::wstring CpaPlugin::BuildTooltip() const
             }
         }
     }
-    if (s.accounts.empty()) tip += L"\nCPA 中没有已启用的 Codex / Claude / Antigravity 账号";
+    if (s.accounts.empty()) tip += L"\nCPA 中没有可查询的账号（检查账号是否启用，以及插件选项中勾选的账号类型）";
     return tip;
 }
 

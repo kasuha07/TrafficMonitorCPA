@@ -38,6 +38,7 @@
 - **CPA 地址**：默认 `http://127.0.0.1:8317`。
 - **管理密钥**：CPA 配置中的 `remote-management.secret-key`。远程访问 CPA 时还需开启 `remote-management.allow-remote`。
 - **刷新间隔**：15~3600 秒，默认 60 秒。
+- **查询账号**：分别勾选是否查询 Codex / Claude / Antigravity 账号。未勾选的类型不会请求上游，对应显示项保持 `--`。
 
 「测试连接」会列出 CPA 中可用的 Codex / Claude / Antigravity 账号数。
 
