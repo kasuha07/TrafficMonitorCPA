@@ -1,6 +1,6 @@
 # CPAQuota
 
-[TrafficMonitor](https://github.com/zhongyang219/TrafficMonitor) 插件：通过 [CLIProxyAPI](https://github.com/router-for-me/CLIProxyAPI)（CPA）的管理接口，在任务栏显示 CPA 中各账号的额度剩余。目前支持 **Codex** 和 **Claude** 账号的 5 小时额度和周额度。
+[TrafficMonitor](https://github.com/zhongyang219/TrafficMonitor) 插件：通过 [CLIProxyAPI](https://github.com/router-for-me/CLIProxyAPI)（CPA）的管理接口，在任务栏显示 CPA 中各账号的额度剩余。目前支持 **Codex**、**Claude** 和 **Antigravity（Gemini）** 账号的 5 小时额度和周额度。
 
 ## 显示项目
 
@@ -8,10 +8,12 @@
 |---|---|
 | `X5h` / `X7d` | 所有 Codex 账号中 5 小时 / 7 天额度剩余百分比**最低**的值 |
 | `C5h` / `C7d` | 所有 Claude 账号中 5 小时 / 7 天额度剩余百分比**最低**的值 |
+| `G5h` / `G7d` | 所有 Antigravity 账号 **Gemini Models** 分组中 5 小时 / 7 天额度剩余百分比**最低**的值 |
 
 - 每个项目都带资源占用图（剩余比例）。
 - 鼠标提示列出每个账号的套餐、各窗口剩余百分比和重置倒计时，以及获取失败的原因。
 - 插件命令「立即刷新额度」可手动刷新。Codex 团队账号的次级窗口是月度额度，提示中显示为「30d」，任务栏上仍计入 `X7d`。
+- Antigravity 按模型分组计算额度（如 Gemini、Claude/GPT），鼠标提示中逐组列出；任务栏只汇总 Gemini 分组（没有该分组时取第一个分组）。
 
 ## 工作原理
 
@@ -21,9 +23,10 @@
 2. 对每个账号调用 `POST /v8/management/requests/api-call`，由 CPA 注入该账号的 token，请求上游用量接口：
    - Codex：`https://chatgpt.com/backend-api/wham/usage`
    - Claude：`https://api.anthropic.com/api/oauth/usage`
-3. 解析 Codex 的 `rate_limit.primary_window/secondary_window` 和 Claude 的 `five_hour/seven_day`。
+   - Antigravity：`POST .../v1internal:retrieveUserQuotaSummary`（请求体 `{"project": <project_id>}`，依次尝试 daily / sandbox / 正式三个端点）
+3. 解析 Codex 的 `rate_limit.primary_window/secondary_window`、Claude 的 `five_hour/seven_day`、Antigravity 的 `groups[].buckets[]`（`window` + `remainingFraction`）。
 
-插件只需要 CPA 地址和管理密钥，不直接接触任何账号凭证。
+插件只需要 CPA 地址和管理密钥，token 始终由 CPA 注入。唯一的例外：Antigravity 账号在账号列表中没有 `project_id` 时，插件会通过 `/v8/management/credentials/download` 读取该账号的凭证文件，只取其中的 `project_id` 并缓存在内存中。
 
 ## 设置
 
@@ -33,7 +36,7 @@
 - **管理密钥**：CPA 配置中的 `remote-management.secret-key`。远程访问 CPA 时还需开启 `remote-management.allow-remote`。
 - **刷新间隔**：15~3600 秒，默认 60 秒。
 
-「测试连接」会列出 CPA 中可用的 Codex / Claude 账号数。
+「测试连接」会列出 CPA 中可用的 Codex / Claude / Antigravity 账号数。
 
 配置保存在 TrafficMonitor 插件配置目录（取不到时为 DLL 所在目录）的 `CPAQuota.ini`，管理密钥用 Windows DPAPI 按当前用户加密。
 

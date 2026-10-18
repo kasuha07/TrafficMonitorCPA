@@ -70,7 +70,7 @@ private:
     Config config_;
 
     // 以下成员只在主线程访问。
-    std::array<QuotaItem, 4> items_;
+    std::array<QuotaItem, 6> items_;
     std::shared_ptr<const Snapshot> shown_;
     std::wstring tooltip_;
     int64_t last_fetch_ = 0;

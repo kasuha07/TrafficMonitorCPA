@@ -156,8 +156,49 @@ static void TestClaudeUsage()
     CHECK(!ParseClaudeUsage(R"({"five_hour":null})", none, &err));
 }
 
+static void TestAntigravity()
+{
+    std::string err;
+    auto accounts = ParseCredentials(R"({"files":[
+        {"auth_index":"ag1","name":"antigravity-a.json","provider":"antigravity","email":"e@x.com","project_id":"proj-1"}]})", &err);
+    CHECK(accounts && accounts->size() == 1);
+    CHECK((*accounts)[0].provider == Provider::Antigravity);
+    CHECK((*accounts)[0].project_id == "proj-1");
+
+    CHECK(ExtractProjectId(R"({"access_token":"x","project_id":"p-top"})") == "p-top");
+    CHECK(ExtractProjectId(R"({"installed":{"projectId":"p-inst"}})") == "p-inst");
+    CHECK(ExtractProjectId(R"({"type":"antigravity"})").empty());
+
+    CHECK(BuildApiCallBody("ag1", "POST", "https://x", {}, R"({"project":"p"})") ==
+          R"({"auth_index":"ag1","method":"POST","url":"https://x","header":{},"data":"{\"project\":\"p\"}"})");
+
+    AccountQuota q;
+    CHECK(ParseAntigravityQuota(R"({"groups":[
+        {"displayName":"Claude and GPT Models","buckets":[
+            {"window":"5h","remainingFraction":0.5,"resetTime":"2026-10-18T13:00:00Z"},
+            {"window":"weekly","remainingFraction":"0.9"}]},
+        {"displayName":"Gemini Models","description":"Models within this group: Gemini 3 Pro","buckets":[
+            {"displayName":"Weekly Limit Remaining","remainingFraction":0.25,"resetTime":"2026-10-20T00:00:00Z"},
+            {"displayName":"Five Hour Limit Remaining","remainingFraction":"80%"},
+            {"window":"daily","remainingFraction":0.1}]},
+        {"displayName":"Empty","buckets":[]}]})", q, &err));
+    CHECK(q.groups.size() == 2);
+    CHECK(q.groups[0].name == "Claude/GPT");
+    CHECK_NEAR(q.groups[0].five_hour.RemainingPercent(), 50.0);
+    CHECK(q.groups[0].five_hour.reset_at == 1792324800 + 3600);
+    CHECK_NEAR(q.groups[0].weekly.RemainingPercent(), 90.0);
+    // 任务栏汇总取 Gemini 分组
+    CHECK(q.groups[1].name == "Gemini");
+    CHECK_NEAR(q.five_hour.RemainingPercent(), 80.0);
+    CHECK_NEAR(q.weekly.RemainingPercent(), 25.0);
+
+    AccountQuota none;
+    CHECK(!ParseAntigravityQuota(R"({"groups":[{"displayName":"X","buckets":[{"window":"daily","remainingFraction":1}]}]})", none, &err));
+}
+
 int main()
 {
+    TestAntigravity();
     TestJson();
     TestIso8601();
     TestDuration();

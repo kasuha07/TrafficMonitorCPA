@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <cctype>
+#include <cstdlib>
 #include <ctime>
 
 #include "json.h"
@@ -117,6 +118,7 @@ Provider ParseProvider(std::string_view raw)
     key.erase(key.find_last_not_of(" \t") + 1);
     if (key == "codex") return Provider::Codex;
     if (key == "claude") return Provider::Claude;
+    if (key == "antigravity") return Provider::Antigravity;
     return Provider::Unknown;
 }
 
@@ -155,6 +157,7 @@ std::optional<std::vector<Account>> ParseCredentials(std::string_view body, std:
         }
         if (a.chatgpt_account_id.empty())
             a.chatgpt_account_id = StringOf(f.FindAny({"chatgpt_account_id", "chatgptAccountId"}));
+        a.project_id = StringOf(f.FindAny({"project_id", "projectId"}));
 
         out.push_back(std::move(a));
     }
@@ -165,8 +168,24 @@ std::optional<std::vector<Account>> ParseCredentials(std::string_view body, std:
     return out;
 }
 
+std::string ExtractProjectId(std::string_view credential_json)
+{
+    std::string err;
+    auto root = json::Parse(credential_json, &err);
+    if (!root || !root->IsObject()) return {};
+    if (auto id = StringOf(root->FindAny({"project_id", "projectId"})); !id.empty()) return id;
+    for (const char* section : {"installed", "web"}) {
+        const json::Value* v = root->Find(section);
+        if (v && v->IsObject()) {
+            if (auto id = StringOf(v->FindAny({"project_id", "projectId"})); !id.empty()) return id;
+        }
+    }
+    return {};
+}
+
 std::string BuildApiCallBody(std::string_view auth_index, std::string_view method, std::string_view url,
-                             const std::vector<std::pair<std::string, std::string>>& headers)
+                             const std::vector<std::pair<std::string, std::string>>& headers,
+                             std::string_view data)
 {
     std::string body = "{\"auth_index\":" + json::Quote(auth_index) +
                        ",\"method\":" + json::Quote(method) +
@@ -177,7 +196,9 @@ std::string BuildApiCallBody(std::string_view auth_index, std::string_view metho
         first = false;
         body += json::Quote(k) + ':' + json::Quote(v);
     }
-    body += "}}";
+    body += '}';
+    if (!data.empty()) body += ",\"data\":" + json::Quote(data);
+    body += '}';
     return body;
 }
 
@@ -293,6 +314,113 @@ bool ParseClaudeUsage(std::string_view body, AccountQuota& out, std::string* err
         if (error) *error = "usage response has no five_hour/seven_day windows";
         return false;
     }
+    return true;
+}
+
+namespace {
+
+std::string Lower(std::string s)
+{
+    std::transform(s.begin(), s.end(), s.begin(), [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
+    return s;
+}
+
+enum class BucketKind { FiveHour, Weekly, Other };
+
+// 与 Management Center 的 antigravity/labels.ts 一致：先按 window 字段，再按显示文案。
+BucketKind ClassifyBucket(const std::string& window, const std::string& label)
+{
+    std::string w = Lower(window);
+    if (w == "5h" || w == "five-hour" || w == "five_hour") return BucketKind::FiveHour;
+    if (w == "weekly" || w == "week") return BucketKind::Weekly;
+    std::string l = Lower(label);
+    if (l.find("weekly") != std::string::npos) return BucketKind::Weekly;
+    if (l.find("5 hour") != std::string::npos || l.find("5-hour") != std::string::npos ||
+        l.find("five hour") != std::string::npos || l.find("five-hour") != std::string::npos)
+        return BucketKind::FiveHour;
+    return BucketKind::Other;
+}
+
+// remainingFraction 可能是 0~1 的数字、数字字符串或 "85%"。
+std::optional<double> FractionOf(const json::Value* v)
+{
+    if (!v) return std::nullopt;
+    if (auto n = v->AsNumber()) return *n;
+    if (auto s = v->AsString(); s && !s->empty() && s->back() == '%') {
+        char* end = nullptr;
+        std::string num = s->substr(0, s->size() - 1);
+        double d = std::strtod(num.c_str(), &end);
+        if (end == num.c_str() + num.size()) return d / 100;
+    }
+    return std::nullopt;
+}
+
+std::string ShortGroupName(const std::string& name)
+{
+    std::string l = Lower(name);
+    if (l == "gemini models") return "Gemini";
+    if (l == "claude and gpt models") return "Claude/GPT";
+    return name;
+}
+
+} // namespace
+
+bool ParseAntigravityQuota(std::string_view body, AccountQuota& out, std::string* error)
+{
+    auto root = ParseObject(body, error);
+    if (!root) return false;
+    const json::Value* groups = root->Find("groups");
+    if (!groups || !groups->IsArray()) {
+        if (error) *error = "quota summary has no groups";
+        return false;
+    }
+
+    out.groups.clear();
+    int index = 0;
+    for (const json::Value& g : groups->Items()) {
+        ++index;
+        if (!g.IsObject()) continue;
+        QuotaGroup group;
+        std::string raw_name = StringOf(g.FindAny({"displayName", "display_name"}));
+        group.name = raw_name.empty() ? "Group " + std::to_string(index) : ShortGroupName(raw_name);
+
+        const json::Value* buckets = g.Find("buckets");
+        if (!buckets || !buckets->IsArray()) continue;
+        for (const json::Value& b : buckets->Items()) {
+            if (!b.IsObject()) continue;
+            auto fraction = FractionOf(b.FindAny({"remainingFraction", "remaining_fraction"}));
+            if (!fraction) continue;
+            std::string label = StringOf(b.FindAny({"displayName", "display_name"}));
+            if (label.empty()) label = StringOf(b.Find("description"));
+            BucketKind kind = ClassifyBucket(StringOf(b.Find("window")), label);
+            if (kind == BucketKind::Other) continue;
+
+            QuotaWindow w;
+            w.present = true;
+            w.used_percent = 100.0 - *fraction * 100.0;
+            if (auto reset = StringOf(b.FindAny({"resetTime", "reset_time"})); !reset.empty()) {
+                if (auto t = ParseIso8601(reset)) w.reset_at = *t;
+            }
+            (kind == BucketKind::FiveHour ? group.five_hour : group.weekly) = w;
+        }
+        if (group.five_hour.present || group.weekly.present) out.groups.push_back(std::move(group));
+    }
+
+    if (out.groups.empty()) {
+        if (error) *error = "quota summary has no 5h/weekly buckets";
+        return false;
+    }
+
+    // 任务栏汇总取 Gemini 分组；没有时取第一个分组。
+    const QuotaGroup* primary = &out.groups.front();
+    for (const QuotaGroup& g : out.groups) {
+        if (g.name == "Gemini") {
+            primary = &g;
+            break;
+        }
+    }
+    out.five_hour = primary->five_hour;
+    out.weekly = primary->weekly;
     return true;
 }
 

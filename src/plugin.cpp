@@ -84,6 +84,8 @@ CpaPlugin::CpaPlugin()
           {Provider::Codex, WindowKind::Weekly, L"CPA Codex 7d 剩余", L"CpaCodexWeek", L"X7d: "},
           {Provider::Claude, WindowKind::FiveHour, L"CPA Claude 5h 剩余", L"CpaClaude5h", L"C5h: "},
           {Provider::Claude, WindowKind::Weekly, L"CPA Claude 7d 剩余", L"CpaClaudeWeek", L"C7d: "},
+          {Provider::Antigravity, WindowKind::FiveHour, L"CPA Gemini 5h 剩余", L"CpaGemini5h", L"G5h: "},
+          {Provider::Antigravity, WindowKind::Weekly, L"CPA Gemini 7d 剩余", L"CpaGeminiWeek", L"G7d: "},
       }}
 {
 }
@@ -186,7 +188,7 @@ const wchar_t* CpaPlugin::GetInfo(PluginInfoIndex index)
 {
     switch (index) {
     case TMI_NAME:        return L"CPA 额度";
-    case TMI_DESCRIPTION: return L"通过 CLIProxyAPI 管理接口显示 Codex / Claude 账号的 5 小时与周额度剩余。";
+    case TMI_DESCRIPTION: return L"通过 CLIProxyAPI 管理接口显示 Codex / Claude / Antigravity 账号的 5 小时与周额度剩余。";
     case TMI_AUTHOR:      return L"霞葉";
     case TMI_COPYRIGHT:   return L"Copyright (C) 2026 霞葉";
     case TMI_VERSION:     return CPA_VERSION_WSTR;
@@ -209,29 +211,34 @@ std::wstring CpaPlugin::BuildTooltip() const
     }
 
     int64_t now = static_cast<int64_t>(std::time(nullptr));
-    for (Provider p : {Provider::Codex, Provider::Claude}) {
+    auto windows = [now](const QuotaWindow& five_hour, const QuotaWindow& weekly) {
+        std::wstring five = FormatWindow(five_hour, L"5h", now);
+        std::wstring week = FormatWindow(weekly, L"7d", now);
+        return five + (!five.empty() && !week.empty() ? L" · " : L"") + week;
+    };
+
+    for (Provider p : {Provider::Codex, Provider::Claude, Provider::Antigravity}) {
         bool header = false;
         for (const AccountQuota& q : s.accounts) {
             if (q.account.provider != p) continue;
             if (!header) {
-                tip += p == Provider::Codex ? L"\n[Codex]" : L"\n[Claude]";
+                tip += p == Provider::Codex ? L"\n[Codex]" : p == Provider::Claude ? L"\n[Claude]" : L"\n[Antigravity]";
                 header = true;
             }
             tip += L"\n  " + Utf8ToWide(q.account.DisplayName());
             if (!q.plan.empty()) tip += L" (" + Utf8ToWide(q.plan) + L")";
-            tip += L": ";
+            tip += L":";
             if (!q.ok) {
-                tip += L"错误 " + q.error;
-                continue;
+                tip += L" 错误 " + q.error;
+            } else if (p == Provider::Antigravity) {
+                for (const QuotaGroup& g : q.groups)
+                    tip += L"\n    " + Utf8ToWide(g.name) + L": " + windows(g.five_hour, g.weekly);
+            } else {
+                tip += L" " + windows(q.five_hour, q.weekly);
             }
-            std::wstring five = FormatWindow(q.five_hour, L"5h", now);
-            std::wstring week = FormatWindow(q.weekly, L"7d", now);
-            tip += five;
-            if (!five.empty() && !week.empty()) tip += L" · ";
-            tip += week;
         }
     }
-    if (s.accounts.empty()) tip += L"\nCPA 中没有已启用的 Codex / Claude 账号";
+    if (s.accounts.empty()) tip += L"\nCPA 中没有已启用的 Codex / Claude / Antigravity 账号";
     return tip;
 }
 
