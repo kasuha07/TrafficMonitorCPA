@@ -4,6 +4,7 @@
 #include <ctime>
 #include <map>
 #include <mutex>
+#include <optional>
 
 #include "http_client.h"
 #include "json.h"
@@ -19,6 +20,7 @@ constexpr char kCodexUserAgent[] =
     "codex-tui/0.149.1 (Mac OS 26.5.2; arm64) iTerm.app/3.6.11 (codex-tui; 0.149.1)";
 constexpr char kClaudeUsageUrl[] = "https://api.anthropic.com/api/oauth/usage";
 constexpr char kClaudeUserAgent[] = "claude-cli/2.1.280 (external, cli)";
+constexpr char kClaudeProfileUrl[] = "https://api.anthropic.com/api/oauth/profile";
 constexpr char kClaudeResetGrantsUrl[] = "https://api.anthropic.com/api/oauth/usage?cedar_ember=1&skip_spend=1";
 constexpr const char* kAntigravityQuotaUrls[] = {
     "https://daily-cloudcode-pa.googleapis.com/v1internal:retrieveUserQuotaSummary",
@@ -141,24 +143,46 @@ std::string ResolveProjectId(HttpClient& http, const Account& a)
     return id;
 }
 
+// 按账号缓存很少变化的附加信息（套餐、重置卡），减少对上游的请求。
+template <typename T>
+class TtlCache
+{
+public:
+    explicit TtlCache(int64_t ttl_seconds) : ttl_(ttl_seconds) {}
+
+    std::optional<T> Get(const Account& a, int64_t now)
+    {
+        std::lock_guard lock(mutex_);
+        auto it = entries_.find(Key(a));
+        if (it == entries_.end() || now - it->second.first >= ttl_) return std::nullopt;
+        return it->second.second;
+    }
+
+    void Put(const Account& a, int64_t now, T value)
+    {
+        std::lock_guard lock(mutex_);
+        entries_[Key(a)] = {now, std::move(value)};
+    }
+
+private:
+    static std::string Key(const Account& a) { return a.auth_index + "|" + a.name; }
+
+    int64_t ttl_;
+    std::mutex mutex_;
+    std::map<std::string, std::pair<int64_t, T>> entries_;
+};
+
+int64_t Now()
+{
+    return static_cast<int64_t>(std::time(nullptr));
+}
+
 // 套餐几乎不变，每个账号最多 1 小时查询一次；失败时不显示套餐，不影响额度。
 std::string FetchAntigravityPlan(HttpClient& http, const Account& a, const Headers& headers)
 {
-    constexpr int64_t kCacheSeconds = 3600;
-    struct Entry
-    {
-        int64_t fetched_at = 0;
-        std::string plan;
-    };
-    static std::mutex cache_mutex;
-    static std::map<std::string, Entry> cache;
-    const std::string key = a.auth_index + "|" + a.name;
-    const int64_t now = static_cast<int64_t>(std::time(nullptr));
-    {
-        std::lock_guard lock(cache_mutex);
-        if (auto it = cache.find(key); it != cache.end() && now - it->second.fetched_at < kCacheSeconds)
-            return it->second.plan;
-    }
+    static TtlCache<std::string> cache(3600);
+    const int64_t now = Now();
+    if (auto cached = cache.Get(a, now)) return *cached;
 
     std::string body;
     std::wstring error;
@@ -166,10 +190,22 @@ std::string FetchAntigravityPlan(HttpClient& http, const Account& a, const Heade
                       R"({"metadata":{"ideType":"ANTIGRAVITY"}})", body, error))
         return {};
     std::string plan = ParseAntigravityPlan(body);
-    if (!plan.empty()) {
-        std::lock_guard lock(cache_mutex);
-        cache[key] = {now, plan};
-    }
+    if (!plan.empty()) cache.Put(a, now, plan);
+    return plan;
+}
+
+// 同上，Claude 套餐来自 oauth/profile。
+std::string FetchClaudePlan(HttpClient& http, const Account& a, const Headers& headers)
+{
+    static TtlCache<std::string> cache(3600);
+    const int64_t now = Now();
+    if (auto cached = cache.Get(a, now)) return *cached;
+
+    std::string body;
+    std::wstring error;
+    if (!CallUpstream(http, a, "GET", kClaudeProfileUrl, headers, {}, body, error)) return {};
+    std::string plan = ParseClaudePlan(body);
+    if (!plan.empty()) cache.Put(a, now, plan);
     return plan;
 }
 
@@ -224,21 +260,10 @@ void FetchCodexResetCredits(HttpClient& http, AccountQuota& q, Headers headers)
 // 且 grant 很少变化，所以每个账号最多 10 分钟请求一次，期间使用缓存。
 void FetchClaudeResetGrants(HttpClient& http, AccountQuota& q, const Headers& headers, int64_t now)
 {
-    constexpr int64_t kCacheSeconds = 600;
-    struct Entry
-    {
-        int64_t fetched_at = 0;
-        ResetCredits credits;
-    };
-    static std::mutex cache_mutex;
-    static std::map<std::string, Entry> cache;
-    const std::string key = q.account.auth_index + "|" + q.account.name;
-    {
-        std::lock_guard lock(cache_mutex);
-        if (auto it = cache.find(key); it != cache.end() && now - it->second.fetched_at < kCacheSeconds) {
-            q.reset_credits = it->second.credits;
-            return;
-        }
+    static TtlCache<ResetCredits> cache(600);
+    if (auto cached = cache.Get(q.account, now)) {
+        q.reset_credits = *cached;
+        return;
     }
 
     std::string body;
@@ -248,8 +273,7 @@ void FetchClaudeResetGrants(HttpClient& http, AccountQuota& q, const Headers& he
     std::string err;
     if (!ParseClaudeResetGrants(body, credits, &err)) return;
     q.reset_credits = credits;
-    std::lock_guard lock(cache_mutex);
-    cache[key] = {now, credits};
+    cache.Put(q.account, now, credits);
 }
 
 void FetchAccountQuota(HttpClient& http, AccountQuota& q, int64_t now)
@@ -297,8 +321,12 @@ void FetchAccountQuota(HttpClient& http, AccountQuota& q, int64_t now)
     if (q.plan.empty()) q.plan = a.plan;
     q.ok = true;
 
-    if (a.provider == Provider::Codex) FetchCodexResetCredits(http, q, headers);
-    else FetchClaudeResetGrants(http, q, headers, now);
+    if (a.provider == Provider::Codex) {
+        FetchCodexResetCredits(http, q, headers);
+    } else {
+        FetchClaudeResetGrants(http, q, headers, now);
+        if (q.plan.empty()) q.plan = FetchClaudePlan(http, a, headers);
+    }
 }
 
 } // namespace

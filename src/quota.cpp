@@ -16,6 +16,12 @@ constexpr double kWeekSeconds = 604800;
 constexpr double kMinMonthSeconds = 28.0 * 24 * 3600;
 constexpr double kMaxMonthSeconds = 31.0 * 24 * 3600;
 
+std::string Lower(std::string s)
+{
+    std::transform(s.begin(), s.end(), s.begin(), [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
+    return s;
+}
+
 std::string StringOf(const json::Value* v)
 {
     if (!v) return {};
@@ -35,8 +41,7 @@ bool TruthyOf(const json::Value* v)
     if (auto b = v->AsBool()) return *b;
     if (auto n = v->AsNumber()) return *n != 0;
     if (auto s = v->AsString()) {
-        std::string lower = *s;
-        std::transform(lower.begin(), lower.end(), lower.begin(), [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
+        std::string lower = Lower(*s);
         return lower == "true" || lower == "1" || lower == "yes";
     }
     return false;
@@ -356,6 +361,40 @@ bool ParseClaudeResetGrants(std::string_view body, ResetCredits& out, std::strin
     return true;
 }
 
+std::string ParseClaudePlan(std::string_view body)
+{
+    std::string err;
+    auto root = ParseObject(body, &err);
+    if (!root) return {};
+
+    if (const json::Value* org = root->Find("organization"); org && org->IsObject()) {
+        if (Lower(StringOf(org->Find("organization_type"))) == "claude_team" &&
+            Lower(StringOf(org->Find("subscription_status"))) == "active")
+            return "Team";
+    }
+
+    // 标记可能是布尔、数字或 "true"/"yes" 等字符串；缺失时为未知。
+    auto flag = [](const json::Value* v) -> std::optional<bool> {
+        if (!v || v->IsNull()) return std::nullopt;
+        if (auto b = v->AsBool()) return *b;
+        if (auto n = v->AsNumber()) return *n != 0;
+        if (auto s = v->AsString()) {
+            std::string l = Lower(*s);
+            if (l == "true" || l == "1" || l == "yes" || l == "y" || l == "on") return true;
+            if (l == "false" || l == "0" || l == "no" || l == "n" || l == "off") return false;
+        }
+        return std::nullopt;
+    };
+    const json::Value* account = root->Find("account");
+    if (!account || !account->IsObject()) return {};
+    auto max = flag(account->Find("has_claude_max"));
+    if (max == true) return "Max";
+    auto pro = flag(account->Find("has_claude_pro"));
+    if (pro == true) return "Pro";
+    if (max == false && pro == false) return "Free";
+    return {};
+}
+
 bool ParseClaudeUsage(std::string_view body, AccountQuota& out, std::string* error)
 {
     auto root = ParseObject(body, error);
@@ -390,12 +429,6 @@ bool ParseClaudeUsage(std::string_view body, AccountQuota& out, std::string* err
 }
 
 namespace {
-
-std::string Lower(std::string s)
-{
-    std::transform(s.begin(), s.end(), s.begin(), [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
-    return s;
-}
 
 enum class BucketKind { FiveHour, Weekly, Other };
 

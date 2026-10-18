@@ -102,6 +102,10 @@ bool ParseCodexResetCredits(std::string_view body, ResetCredits& out, std::strin
 // 与 Management Center 的 claudeResetGrants.ts 一致。
 bool ParseClaudeResetGrants(std::string_view body, ResetCredits& out, std::string* error);
 
+// 解析 Claude oauth/profile 响应中的套餐：Team / Max / Pro / Free；无法判断时返回空串。
+// 与 Management Center 的 claude/data.ts resolveClaudePlanType 一致。
+std::string ParseClaudePlan(std::string_view body);
+
 // 解析 Claude oauth/usage 响应。
 bool ParseClaudeUsage(std::string_view body, AccountQuota& out, std::string* error);
 

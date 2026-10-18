@@ -186,6 +186,18 @@ static void TestClaudeResetGrants()
     CHECK(!ParseClaudeResetGrants(R"({"five_hour":{"utilization":1}})", bad, &err));
 }
 
+static void TestClaudePlan()
+{
+    CHECK(ParseClaudePlan(R"({"organization":{"organization_type":"claude_team","subscription_status":"active"},
+        "account":{"has_claude_max":true}})") == "Team");
+    CHECK(ParseClaudePlan(R"({"organization":{"organization_type":"claude_team","subscription_status":"past_due"},
+        "account":{"has_claude_max":"yes"}})") == "Max");
+    CHECK(ParseClaudePlan(R"({"account":{"has_claude_max":false,"has_claude_pro":1}})") == "Pro");
+    CHECK(ParseClaudePlan(R"({"account":{"has_claude_max":false,"has_claude_pro":"false"}})") == "Free");
+    CHECK(ParseClaudePlan(R"({"account":{"has_claude_max":false}})").empty());  // pro 未知 → 不猜
+    CHECK(ParseClaudePlan(R"({"account":{}})").empty());
+}
+
 static void TestClaudeUsage()
 {
     std::string err;
@@ -263,6 +275,7 @@ int main()
     TestCodexUsage();
     TestCodexResetCredits();
     TestClaudeResetGrants();
+    TestClaudePlan();
     TestClaudeUsage();
     if (g_failures) {
         std::printf("%d check(s) failed\n", g_failures);

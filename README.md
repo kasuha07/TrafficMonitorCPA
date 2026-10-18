@@ -11,7 +11,7 @@
 | `G5h` / `G7d` | 所有 Antigravity 账号 **Gemini Models** 分组中 5 小时 / 7 天额度剩余百分比**最低**的值 |
 
 - 每个项目都带资源占用图（剩余比例）。
-- 鼠标提示列出每个账号的套餐、各窗口剩余百分比和重置倒计时，以及获取失败的原因。
+- 鼠标提示列出每个账号的套餐、各窗口剩余百分比和重置倒计时，以及获取失败的原因。Claude 套餐（Team / Max / Pro / Free）来自 `oauth/profile`，每个账号最多 1 小时查询一次。
 - Codex / Claude 账号有可用的额度重置卡时，提示中显示为「重置卡*数量 (最早一张的过期倒计时)」：
   - Codex 来自 `wham/rate-limit-reset-credits`，该接口失败时退回用量响应中的数量。
   - Claude 来自 `oauth/usage?cedar_ember=1` 的 reset grants，数量为各 grant 剩余次数之和；为避免触发限流，每个账号最多 10 分钟查询一次。
