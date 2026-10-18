@@ -400,6 +400,14 @@ static void TestCarryOver()
     CHECK(f4.failures == 1);
 }
 
+static void TestLanguage()
+{
+    CHECK(!IsEnglishLanguage(0x0804));  // zh-CN
+    CHECK(!IsEnglishLanguage(0x0404));  // zh-TW
+    CHECK(IsEnglishLanguage(0x0409));   // en-US
+    CHECK(IsEnglishLanguage(0x0411));   // ja-JP
+}
+
 static void TestAggregate()
 {
     const std::vector<double> v = {80, -1, 20, 0.2, 50};
@@ -421,6 +429,7 @@ int main()
 {
     SetEnglish(false);  // 断言使用中文文案，不受运行环境语言影响
     TestAggregate();
+    TestLanguage();
     TestAlerts();
     TestCooldown();
     TestCarryOver();

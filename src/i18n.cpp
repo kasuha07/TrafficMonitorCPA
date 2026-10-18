@@ -25,6 +25,8 @@ bool IsEnglish()
 
 bool IsEnglishLanguage(unsigned short langid)
 {
+    // TrafficMonitor 的语言设置为「跟随系统」时传入 0，此时按系统界面语言判断。
+    if (langid == 0) langid = GetUserDefaultUILanguage();
     return PRIMARYLANGID(langid) != LANG_CHINESE;
 }
 

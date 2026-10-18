@@ -12,7 +12,7 @@ inline const wchar_t* T(const wchar_t* zh, const wchar_t* en)
     return IsEnglish() ? en : zh;
 }
 
-// 由 LANGID 判断是否使用英文（非中文即英文）。
+// 由 LANGID 判断是否使用英文（非中文即英文）。0 表示 TrafficMonitor「跟随系统」，按系统界面语言判断。
 bool IsEnglishLanguage(unsigned short langid);
 
 } // namespace cpa
