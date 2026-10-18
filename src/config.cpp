@@ -1,4 +1,5 @@
 #include "config.h"
+#include "i18n.h"
 
 #include <windows.h>
 #include <dpapi.h>
@@ -110,7 +111,7 @@ bool SaveConfig(const std::wstring& ini_path, const Config& config, std::wstring
 {
     std::wstring key_hex = Protect(config.management_key);
     if (!config.management_key.empty() && key_hex.empty()) {
-        if (error) *error = L"加密管理密钥失败";
+        if (error) *error = T(L"加密管理密钥失败", L"Failed to encrypt the management key");
         return false;
     }
     std::wstring refresh = std::to_wstring(config.refresh_seconds);
@@ -132,7 +133,7 @@ bool SaveConfig(const std::wstring& ini_path, const Config& config, std::wstring
               WritePrivateProfileStringW(kSection, L"SmartCooldown", flag(config.smart_cooldown), ini_path.c_str()) &&
               WritePrivateProfileStringW(kSection, L"DoubleClick",
                                          std::to_wstring(static_cast<int>(config.double_click)).c_str(), ini_path.c_str());
-    if (!ok && error) *error = L"无法写入配置文件: " + ini_path;
+    if (!ok && error) *error = T(L"无法写入配置文件: ", L"Cannot write config file: ") + ini_path;
     return ok;
 }
 

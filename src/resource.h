@@ -1,6 +1,7 @@
 #pragma once
 
 #define IDD_OPTIONS     101
+#define IDD_OPTIONS_EN  102
 
 #define IDC_URL         1001
 #define IDC_KEY         1002

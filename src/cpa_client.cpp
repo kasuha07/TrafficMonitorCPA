@@ -10,6 +10,7 @@
 #include <thread>
 
 #include "http_client.h"
+#include "i18n.h"
 #include "json.h"
 
 namespace cpa {
@@ -65,14 +66,15 @@ CredentialsResult FetchCredentials(HttpClient& http)
     HttpResponse r = http.Get(kCredentialsPath);
     if (!r.ok || r.status != 200) {
         result.auth_rejected = IsAuthRejected(r);
-        result.error = L"获取账号列表失败: " + DescribeHttpFailure(r);
-        if (r.ok && r.status == 404) result.error += L"（CPA 版本是否支持 /v8/management？）";
+        result.error = T(L"获取账号列表失败: ", L"Failed to fetch accounts: ") + DescribeHttpFailure(r);
+        if (r.ok && r.status == 404)
+            result.error += T(L"（CPA 版本是否支持 /v8/management？）", L" (does this CPA version support /v8/management?)");
         return result;
     }
     std::string err;
     auto accounts = ParseCredentials(r.body, &err);
     if (!accounts) {
-        result.error = L"解析账号列表失败: " + Utf8ToWide(err);
+        result.error = T(L"解析账号列表失败: ", L"Failed to parse accounts: ") + Utf8ToWide(err);
         return result;
     }
     result.ok = true;
@@ -94,11 +96,11 @@ bool CallUpstream(HttpClient& http, const Account& a, const char* method, const 
     std::string err;
     auto call = ParseApiCallResponse(r.body, &err);
     if (!call) {
-        error = L"解析 api-call 响应失败: " + Utf8ToWide(err);
+        error = T(L"解析 api-call 响应失败: ", L"Failed to parse api-call response: ") + Utf8ToWide(err);
         return false;
     }
     if (call->status_code < 200 || call->status_code >= 300) {
-        error = L"上游 HTTP " + std::to_wstring(call->status_code);
+        error = T(L"上游 HTTP ", L"Upstream HTTP ") + std::to_wstring(call->status_code);
         std::string detail = ExtractErrorMessage(call->body);
         if (!detail.empty()) error += L": " + Utf8ToWide(detail);
         return false;
@@ -216,7 +218,7 @@ void FetchAntigravityQuota(HttpClient& http, AccountQuota& q)
 {
     std::string project = ResolveProjectId(http, q.account);
     if (project.empty()) {
-        q.error = L"缺少 project_id";
+        q.error = T(L"缺少 project_id", L"Missing project_id");
         return;
     }
     const Headers headers = {
@@ -237,7 +239,7 @@ void FetchAntigravityQuota(HttpClient& http, AccountQuota& q)
             q.plan = FetchAntigravityPlan(http, q.account, headers);
             return;
         }
-        last_error = L"解析额度失败: " + Utf8ToWide(err);
+        last_error = T(L"解析额度失败: ", L"Failed to parse quota: ") + Utf8ToWide(err);
     }
     q.error = last_error;
 }
@@ -307,7 +309,7 @@ void FetchAccountQuota(HttpClient& http, AccountQuota& q, int64_t now)
             {"Accept", "application/json"},
         };
     } else {
-        q.error = L"不支持的账号类型";
+        q.error = T(L"不支持的账号类型", L"Unsupported account type");
         return;
     }
 
@@ -318,7 +320,7 @@ void FetchAccountQuota(HttpClient& http, AccountQuota& q, int64_t now)
     bool parsed = a.provider == Provider::Codex ? ParseCodexUsage(body, now, q, &err)
                                                 : ParseClaudeUsage(body, q, &err);
     if (!parsed) {
-        q.error = L"解析额度失败: " + Utf8ToWide(err);
+        q.error = T(L"解析额度失败: ", L"Failed to parse quota: ") + Utf8ToWide(err);
         return;
     }
     if (q.plan.empty()) q.plan = a.plan;
@@ -353,11 +355,11 @@ Snapshot FetchSnapshot(const Config& config, const Snapshot* previous, bool forc
     Snapshot snap;
     snap.fetched_at = static_cast<int64_t>(std::time(nullptr));
     if (config.management_key.empty()) {
-        snap.error = L"未设置 CPA 管理密钥，请在插件选项中配置";
+        snap.error = T(L"未设置 CPA 管理密钥，请在插件选项中配置", L"CPA management key is not set. Configure it in plugin options.");
         return snap;
     }
     if (!config.enable_codex && !config.enable_claude && !config.enable_antigravity) {
-        snap.error = L"未勾选任何账号类型，请在插件选项的「查询账号」中勾选";
+        snap.error = T(L"未勾选任何账号类型，请在插件选项的「查询账号」中勾选", L"No account types selected. Select them under Query in plugin options.");
         return snap;
     }
 
@@ -427,7 +429,7 @@ Snapshot FetchSnapshot(const Config& config, const Snapshot* previous, bool forc
 
 std::wstring TestConnection(const Config& config)
 {
-    if (config.management_key.empty()) return L"请填写管理密钥";
+    if (config.management_key.empty()) return T(L"请填写管理密钥", L"Please enter the management key");
     HttpClient http(config.base_url, config.management_key, 10000, config.skip_tls_verify);
     CredentialsResult creds = FetchCredentials(http);
     if (!creds.ok) return creds.error;
@@ -438,6 +440,10 @@ std::wstring TestConnection(const Config& config)
         if (a.provider == Provider::Codex) ++codex;
         else if (a.provider == Provider::Claude) ++claude;
         else if (a.provider == Provider::Antigravity) ++antigravity;
+    }
+    if (IsEnglish()) {
+        return L"Connected: Codex " + std::to_wstring(codex) + L", Claude " + std::to_wstring(claude) +
+               L", Antigravity " + std::to_wstring(antigravity) + L" accounts";
     }
     return L"连接成功：Codex " + std::to_wstring(codex) + L" 个，Claude " + std::to_wstring(claude) +
            L" 个，Antigravity " + std::to_wstring(antigravity) + L" 个账号";

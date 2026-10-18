@@ -34,6 +34,8 @@ add_link_options("$<$<NOT:$<CONFIG:Debug>>:/LTCG;/OPT:REF;/OPT:ICF>")
 add_library(cpa_core STATIC
     src/alerts.cpp
     src/alerts.h
+    src/i18n.cpp
+    src/i18n.h
     src/json.cpp
     src/json.h
     src/quota.cpp

@@ -1,4 +1,5 @@
 #include "options_dialog.h"
+#include "i18n.h"
 
 #include <string>
 
@@ -30,12 +31,12 @@ bool ReadInputs(HWND dlg, Config& out)
     std::wstring refresh = GetText(dlg, IDC_REFRESH);
 
     if (out.base_url.rfind(L"http://", 0) != 0 && out.base_url.rfind(L"https://", 0) != 0) {
-        SetDlgItemTextW(dlg, IDC_STATUS, L"CPA 地址需以 http:// 或 https:// 开头");
+        SetDlgItemTextW(dlg, IDC_STATUS, T(L"CPA 地址需以 http:// 或 https:// 开头", L"CPA URL must start with http:// or https://"));
         return false;
     }
     unsigned seconds = refresh.empty() ? 0 : static_cast<unsigned>(_wtoi(refresh.c_str()));
     if (seconds < 15 || seconds > 3600) {
-        SetDlgItemTextW(dlg, IDC_STATUS, L"刷新间隔需在 15~3600 秒之间");
+        SetDlgItemTextW(dlg, IDC_STATUS, T(L"刷新间隔需在 15~3600 秒之间", L"Refresh interval must be 15-3600 seconds"));
         return false;
     }
     out.refresh_seconds = seconds;
@@ -44,7 +45,7 @@ bool ReadInputs(HWND dlg, Config& out)
     out.enable_claude = IsDlgButtonChecked(dlg, IDC_ENABLE_CLAUDE) == BST_CHECKED;
     out.enable_antigravity = IsDlgButtonChecked(dlg, IDC_ENABLE_ANTIGRAVITY) == BST_CHECKED;
     if (!out.enable_codex && !out.enable_claude && !out.enable_antigravity) {
-        SetDlgItemTextW(dlg, IDC_STATUS, L"至少需要启用一种账号类型");
+        SetDlgItemTextW(dlg, IDC_STATUS, T(L"至少需要启用一种账号类型", L"Select at least one account type"));
         return false;
     }
 
@@ -54,7 +55,7 @@ bool ReadInputs(HWND dlg, Config& out)
     std::wstring alert = GetText(dlg, IDC_ALERT);
     unsigned threshold = alert.empty() ? 0 : static_cast<unsigned>(_wtoi(alert.c_str()));
     if (threshold > 99) {
-        SetDlgItemTextW(dlg, IDC_STATUS, L"低额度提醒阈值需在 0~99 之间");
+        SetDlgItemTextW(dlg, IDC_STATUS, T(L"低额度提醒阈值需在 0~99 之间", L"Alert threshold must be 0-99"));
         return false;
     }
     out.alert_threshold = threshold;
@@ -83,7 +84,9 @@ INT_PTR CALLBACK DialogProc(HWND dlg, UINT msg, WPARAM wp, LPARAM lp)
         CheckDlgButton(dlg, IDC_ENABLE_CLAUDE, config->enable_claude ? BST_CHECKED : BST_UNCHECKED);
         CheckDlgButton(dlg, IDC_ENABLE_ANTIGRAVITY, config->enable_antigravity ? BST_CHECKED : BST_UNCHECKED);
         // 顺序与 AggregateMode 的取值一致。
-        for (const wchar_t* text : {L"最低（剩余最少的账号）", L"平均", L"最高（剩余最多的账号）", L"可用账号数（如 3/5）"})
+        for (const wchar_t* text : {T(L"最低（剩余最少的账号）", L"Lowest remaining"), T(L"平均", L"Average"),
+                                    T(L"最高（剩余最多的账号）", L"Highest remaining"),
+                                    T(L"可用账号数（如 3/5）", L"Accounts with quota (e.g. 3/5)")})
             SendDlgItemMessageW(dlg, IDC_AGGREGATE, CB_ADDSTRING, 0, reinterpret_cast<LPARAM>(text));
         SendDlgItemMessageW(dlg, IDC_AGGREGATE, CB_SETCURSEL, static_cast<WPARAM>(config->aggregate), 0);
         SetDlgItemTextW(dlg, IDC_ALERT, std::to_wstring(config->alert_threshold).c_str());
@@ -93,12 +96,14 @@ INT_PTR CALLBACK DialogProc(HWND dlg, UINT msg, WPARAM wp, LPARAM lp)
         CheckDlgButton(dlg, IDC_SMART_COOLDOWN, config->smart_cooldown ? BST_CHECKED : BST_UNCHECKED);
         CheckDlgButton(dlg, IDC_COLOR_BY_QUOTA, config->color_by_quota ? BST_CHECKED : BST_UNCHECKED);
         // 顺序与 DoubleClickAction 的取值一致。
-        for (const wchar_t* text : {L"打开 CPA 管理页面", L"立即刷新额度"})
+        for (const wchar_t* text : {T(L"打开 CPA 管理页面", L"Open CPA management page"), T(L"立即刷新额度", L"Refresh quota now")})
             SendDlgItemMessageW(dlg, IDC_DOUBLE_CLICK, CB_ADDSTRING, 0, reinterpret_cast<LPARAM>(text));
         SendDlgItemMessageW(dlg, IDC_DOUBLE_CLICK, CB_SETCURSEL, static_cast<WPARAM>(config->double_click), 0);
         SetDlgItemTextW(dlg, IDC_STATUS,
-                        L"管理密钥即 CPA 配置中的 remote-management.secret-key。\r\n"
-                        L"注意：CPA 对连续 5 次密钥错误会封禁 IP 30 分钟。");
+                        T(L"管理密钥即 CPA 配置中的 remote-management.secret-key。\r\n"
+                          L"注意：CPA 对连续 5 次密钥错误会封禁 IP 30 分钟。",
+                          L"The management key is remote-management.secret-key in the CPA config.\r\n"
+                          L"Note: CPA bans the IP for 30 minutes after 5 wrong keys in a row."));
         return TRUE;
     }
     case WM_COMMAND:
@@ -106,7 +111,7 @@ INT_PTR CALLBACK DialogProc(HWND dlg, UINT msg, WPARAM wp, LPARAM lp)
         case IDC_TEST: {
             Config probe;
             if (!ReadInputs(dlg, probe)) return TRUE;
-            SetDlgItemTextW(dlg, IDC_STATUS, L"正在连接…");
+            SetDlgItemTextW(dlg, IDC_STATUS, T(L"正在连接…", L"Connecting…"));
             HCURSOR old = SetCursor(LoadCursorW(nullptr, IDC_WAIT));
             UpdateWindow(dlg);
             std::wstring result = TestConnection(probe);
@@ -136,7 +141,7 @@ INT_PTR CALLBACK DialogProc(HWND dlg, UINT msg, WPARAM wp, LPARAM lp)
 bool ShowOptionsDialog(HWND parent, Config& config)
 {
     Config working = config;
-    INT_PTR r = DialogBoxParamW(reinterpret_cast<HINSTANCE>(&__ImageBase), MAKEINTRESOURCEW(IDD_OPTIONS), parent,
+    INT_PTR r = DialogBoxParamW(reinterpret_cast<HINSTANCE>(&__ImageBase), MAKEINTRESOURCEW(IsEnglish() ? IDD_OPTIONS_EN : IDD_OPTIONS), parent,
                                 DialogProc, reinterpret_cast<LPARAM>(&working));
     if (r != IDOK) return false;
     config = working;

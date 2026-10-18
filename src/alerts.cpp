@@ -1,4 +1,5 @@
 #include "alerts.h"
+#include "i18n.h"
 
 #include <windows.h>
 
@@ -49,7 +50,7 @@ std::vector<std::wstring> LowQuotaAlerts::Check(const std::vector<AccountQuota>&
 
         std::wstring msg = std::wstring(ProviderName(q.account.provider)) + L" " + Widen(q.account.DisplayName());
         if (!group.empty()) msg += L" " + Widen(group);
-        msg += L" " + std::wstring(w.monthly ? L"30d" : window) + L" 剩余 " +
+        msg += L" " + std::wstring(w.monthly ? L"30d" : window) + T(L" 剩余 ", L" remaining ") +
                std::to_wstring(static_cast<int>(remaining + 0.5)) + L"%";
         if (w.reset_at > now) msg += L" (" + FormatDuration(w.reset_at - now) + L")";
         messages.push_back(std::move(msg));

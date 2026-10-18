@@ -5,6 +5,7 @@
 #include <string>
 
 #include "alerts.h"
+#include "i18n.h"
 #include "json.h"
 #include "quota.h"
 
@@ -418,6 +419,7 @@ static void TestAggregate()
 
 int main()
 {
+    SetEnglish(false);  // 断言使用中文文案，不受运行环境语言影响
     TestAggregate();
     TestAlerts();
     TestCooldown();

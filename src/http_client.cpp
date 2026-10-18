@@ -1,4 +1,5 @@
 #include "http_client.h"
+#include "i18n.h"
 
 #include <windows.h>
 #include <winhttp.h>
@@ -39,10 +40,13 @@ std::wstring LastErrorText(const wchar_t* what)
     msg += std::to_wstring(code);
     msg += L")";
     switch (code) {
-    case ERROR_WINHTTP_CANNOT_CONNECT: msg += L": 无法连接到 CPA"; break;
-    case ERROR_WINHTTP_TIMEOUT: msg += L": 请求超时"; break;
-    case ERROR_WINHTTP_NAME_NOT_RESOLVED: msg += L": 无法解析主机名"; break;
-    case ERROR_WINHTTP_SECURE_FAILURE: msg += L": TLS 证书校验失败（自签名证书可在选项中跳过校验）"; break;
+    case ERROR_WINHTTP_CANNOT_CONNECT: msg += T(L": 无法连接到 CPA", L": cannot connect to CPA"); break;
+    case ERROR_WINHTTP_TIMEOUT: msg += T(L": 请求超时", L": request timed out"); break;
+    case ERROR_WINHTTP_NAME_NOT_RESOLVED: msg += T(L": 无法解析主机名", L": host name not resolved"); break;
+    case ERROR_WINHTTP_SECURE_FAILURE:
+        msg += T(L": TLS 证书校验失败（自签名证书可在选项中跳过校验）",
+                 L": TLS certificate check failed (self-signed certificates can skip it in options)");
+        break;
     default: break;
     }
     return msg;
@@ -101,7 +105,7 @@ HttpResponse HttpClient::Send(const wchar_t* method, std::wstring_view path, std
     uc.lpszExtraInfo = extra;
     uc.dwExtraInfoLength = static_cast<DWORD>(std::size(extra));
     if (!WinHttpCrackUrl(url.c_str(), 0, 0, &uc)) {
-        resp.error = L"CPA 地址无效: " + base_url_;
+        resp.error = T(L"CPA 地址无效: ", L"Invalid CPA URL: ") + base_url_;
         return resp;
     }
     bool secure = uc.nScheme == INTERNET_SCHEME_HTTPS;
@@ -160,7 +164,7 @@ HttpResponse HttpClient::Send(const wchar_t* method, std::wstring_view path, std
         }
         if (available == 0) break;
         if (resp.body.size() + available > kMaxBody) {
-            resp.error = L"响应过大";
+            resp.error = T(L"响应过大", L"Response too large");
             return resp;
         }
         size_t old = resp.body.size();

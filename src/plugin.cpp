@@ -9,6 +9,7 @@
 
 #include "config.h"
 #include "http_client.h"
+#include "i18n.h"
 #include "options_dialog.h"
 #include "version.h"
 
@@ -252,7 +253,7 @@ void CpaPlugin::NotifyLowQuota(const Snapshot& snapshot)
     auto messages = alerts_.Check(snapshot.accounts, static_cast<int>(config_.alert_threshold),
                                   static_cast<int64_t>(std::time(nullptr)));
     if (messages.empty() || !app_) return;
-    std::wstring text = L"CPA 额度不足";
+    std::wstring text = T(L"CPA 额度不足", L"CPA quota low");
     for (const std::wstring& m : messages) text += L"\n" + m;
     app_->ShowNotifyMessage(text.c_str());
 }
@@ -310,8 +311,8 @@ ITMPlugin::OptionReturn CpaPlugin::ShowOptionsDialog(void* hParent)
 const wchar_t* CpaPlugin::GetInfo(PluginInfoIndex index)
 {
     switch (index) {
-    case TMI_NAME:        return L"CPA 额度";
-    case TMI_DESCRIPTION: return L"通过 CLIProxyAPI 管理接口显示 Codex / Claude / Antigravity 账号的 5 小时与周额度剩余。";
+    case TMI_NAME:        return T(L"CPA 额度", L"CPA Quota");
+    case TMI_DESCRIPTION: return T(L"通过 CLIProxyAPI 管理接口显示 Codex / Claude / Antigravity 账号的 5 小时与周额度剩余。", L"Shows 5-hour and weekly quota of Codex / Claude / Antigravity accounts via the CLIProxyAPI management API.");
     case TMI_AUTHOR:      return L"霞葉";
     case TMI_COPYRIGHT:   return L"Copyright (C) 2026 霞葉";
     case TMI_VERSION:     return CPA_VERSION_WSTR;
@@ -322,28 +323,29 @@ const wchar_t* CpaPlugin::GetInfo(PluginInfoIndex index)
 
 std::wstring CpaPlugin::BuildTooltip() const
 {
-    if (!config_loaded_) return L"CPA 额度：等待数据";
-    if (!shown_) return L"CPA 额度：正在获取…";
+    if (!config_loaded_) return T(L"CPA 额度：等待数据", L"CPA Quota: waiting for data");
+    if (!shown_) return T(L"CPA 额度：正在获取…", L"CPA Quota: loading…");
 
     const Snapshot& s = *shown_;
-    std::wstring tip = std::wstring(config_.show_used ? L"CPA 额度已用" : L"CPA 额度") + L"（更新于 " +
-                       FormatClock(s.fetched_at) + L"）";
+    std::wstring tip = std::wstring(config_.show_used ? T(L"CPA 额度已用", L"CPA quota used") : T(L"CPA 额度", L"CPA quota")) +
+                       T(L"（更新于 ", L" (updated ") + FormatClock(s.fetched_at) + T(L"）", L")");
     if (!s.ok) {
         tip += L"\n" + s.error;
-        if (paused_) tip += L"\n已暂停自动刷新，请检查插件选项中的管理密钥";
+        if (paused_) tip += T(L"\n已暂停自动刷新，请检查插件选项中的管理密钥", L"\nAuto refresh paused. Check the management key in plugin options.");
         return tip;
     }
 
     int64_t now = static_cast<int64_t>(std::time(nullptr));
     if (s.failures > 0) {
-        tip += L"\n本次刷新失败（连续 " + std::to_wstring(s.failures) + L" 次），显示 " +
-               FormatDuration(now - s.fetched_at) + L" 前的数据：" + s.warning;
+        tip += T(L"\n本次刷新失败（连续 ", L"\nRefresh failed (") + std::to_wstring(s.failures) +
+               T(L" 次），显示 ", L" in a row), showing data from ") + FormatDuration(now - s.fetched_at) +
+               T(L" 前的数据：", L" ago: ") + s.warning;
     }
     const bool used = config_.show_used;
     auto stale_note = [now](const AccountQuota& q) -> std::wstring {
         if (!q.stale) return {};
-        std::wstring note = L" · 沿用 " + FormatDuration(now - q.data_at) + L" 前数据";
-        if (!q.error.empty()) note += L"（" + q.error + L"）";
+        std::wstring note = T(L" · 沿用 ", L" · data from ") + FormatDuration(now - q.data_at) + T(L" 前数据", L" ago");
+        if (!q.error.empty()) note += T(L"（", L" (") + q.error + T(L"）", L")");
         return note;
     };
     auto windows = [now, used](const QuotaWindow& five_hour, const QuotaWindow& weekly) {
@@ -364,9 +366,9 @@ std::wstring CpaPlugin::BuildTooltip() const
             if (!q.plan.empty()) tip += L" (" + Utf8ToWide(q.plan) + L")";
             tip += L":";
             if (!q.ok) {
-                tip += L" 错误 " + q.error;
+                tip += T(L" 错误 ", L" error: ") + q.error;
             } else if (p == Provider::Antigravity) {
-                if (q.cooled) tip += L" 冷却中";
+                if (q.cooled) tip += T(L" 冷却中", L" cooling down");
                 tip += stale_note(q);
                 for (const QuotaGroup& g : q.groups)
                     tip += L"\n    " + Utf8ToWide(g.name) + L": " + windows(g.five_hour, g.weekly);
@@ -374,15 +376,17 @@ std::wstring CpaPlugin::BuildTooltip() const
                 tip += L" " + windows(q.five_hour, q.weekly);
                 const ResetCredits& rc = q.reset_credits;
                 if (rc.available > 0) {
-                    tip += L" · 重置卡*" + std::to_wstring(rc.available);
+                    tip += T(L" · 重置卡*", L" · reset cards*") + std::to_wstring(rc.available);
                     if (rc.soonest_expiry > now) tip += L" (" + FormatDuration(rc.soonest_expiry - now) + L")";
                 }
-                if (q.cooled) tip += L" · 冷却中";
+                if (q.cooled) tip += T(L" · 冷却中", L" · cooling down");
                 tip += stale_note(q);
             }
         }
     }
-    if (s.accounts.empty()) tip += L"\nCPA 中没有可查询的账号（检查账号是否启用，以及插件选项中勾选的账号类型）";
+    if (s.accounts.empty())
+        tip += T(L"\nCPA 中没有可查询的账号（检查账号是否启用，以及插件选项中勾选的账号类型）",
+                 L"\nNo accounts to query (check that accounts are enabled in CPA and account types are selected in options)");
     return tip;
 }
 
@@ -405,6 +409,7 @@ void CpaPlugin::OnExtenedInfo(ExtendedInfoIndex index, const wchar_t* data)
 void CpaPlugin::OnInitialize(ITrafficMonitor* app)
 {
     app_ = app;
+    if (app_) SetEnglish(IsEnglishLanguage(app_->GetLanguageId()));
     if (app_ && config_dir_.empty()) {
         if (const wchar_t* dir = app_->GetPluginConfigDir(); dir && *dir) config_dir_ = dir;
     }
@@ -413,8 +418,8 @@ void CpaPlugin::OnInitialize(ITrafficMonitor* app)
 const wchar_t* CpaPlugin::GetCommandName(int index)
 {
     switch (index) {
-    case 0: return L"立即刷新额度";
-    case 1: return L"打开 CPA 管理页面";
+    case 0: return T(L"立即刷新额度", L"Refresh quota now");
+    case 1: return T(L"打开 CPA 管理页面", L"Open CPA management page");
     default: return nullptr;
     }
 }
