@@ -74,7 +74,9 @@ GitHub Actions（`.github/workflows/build.yml`）只在发布 Release 时运行�
 
 ```bash
 Get-FileHash CPAQuota-1.2.3-x64.zip -Algorithm SHA256
-```本地构建默认版本为 `0.1.0`，可用 `-DCPA_VERSION=x.y.z` 覆盖。
+```
+
+本地构建和手动触发的 CI 使用 `CMakeLists.txt` 中的默认版本（`CPA_VERSION`），可用 `-DCPA_VERSION=x.y.z` 覆盖。
 
 ## 安装
 

@@ -27,7 +27,8 @@ jobs:
         id: version
         shell: pwsh
         run: |
-          $version = '0.1.0'
+          # Default to the version declared in CMakeLists.txt; releases use the tag.
+          $version = (Select-String -Path CMakeLists.txt -Pattern 'set\(CPA_VERSION "([^"]+)"').Matches[0].Groups[1].Value
           if ('${{ github.event_name }}' -eq 'release') {
             $version = '${{ github.event.release.tag_name }}' -replace '^v', ''
             if ($version -notmatch '^\d+\.\d+\.\d+$') {
