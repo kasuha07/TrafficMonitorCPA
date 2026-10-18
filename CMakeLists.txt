@@ -1,8 +1,8 @@
 cmake_minimum_required(VERSION 3.25)
 
-project(TrafficMonitorCPA
+project(CPAQuota
     VERSION 0.1.0
-    DESCRIPTION "Lightweight TrafficMonitor plugin"
+    DESCRIPTION "TrafficMonitor plugin showing CLIProxyAPI account quotas"
     LANGUAGES CXX RC)
 
 if(NOT MSVC)
@@ -17,31 +17,45 @@ set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 # Static CRT: the DLL has no dependency on the VC++ redistributable.
 set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>")
 
-add_library(TrafficMonitorCPA SHARED
+add_compile_definitions(UNICODE _UNICODE WIN32_LEAN_AND_MEAN NOMINMAX)
+add_compile_options(
+    "$<$<COMPILE_LANGUAGE:CXX>:/utf-8;/W4;/permissive-;/Zc:__cplusplus>"
+    "$<$<AND:$<COMPILE_LANGUAGE:CXX>,$<NOT:$<CONFIG:Debug>>>:/O1;/Gy;/GL>"
+)
+add_link_options("$<$<NOT:$<CONFIG:Debug>>:/LTCG;/OPT:REF;/OPT:ICF>")
+
+# Pure parsing logic, shared by the plugin and the unit tests.
+add_library(cpa_core STATIC
+    src/json.cpp
+    src/json.h
+    src/quota.cpp
+    src/quota.h
+)
+target_include_directories(cpa_core PUBLIC src)
+
+add_library(CPAQuota SHARED
     src/plugin.cpp
     src/plugin.h
-    src/version.rc
+    src/cpa_client.cpp
+    src/cpa_client.h
+    src/http_client.cpp
+    src/http_client.h
+    src/config.cpp
+    src/config.h
+    src/options_dialog.cpp
+    src/options_dialog.h
+    src/resource.h
+    src/plugin.rc
 )
-
-target_include_directories(TrafficMonitorCPA SYSTEM PRIVATE
-    third_party/TrafficMonitor
-)
-target_include_directories(TrafficMonitorCPA PRIVATE
-    ${CMAKE_CURRENT_BINARY_DIR}
-)
-
-target_compile_definitions(TrafficMonitorCPA PRIVATE
-    UNICODE _UNICODE
-    WIN32_LEAN_AND_MEAN NOMINMAX
-)
-
-target_compile_options(TrafficMonitorCPA PRIVATE
-    $<$<COMPILE_LANGUAGE:CXX>:/utf-8 /W4 /permissive- /Zc:__cplusplus>
-    $<$<AND:$<COMPILE_LANGUAGE:CXX>,$<NOT:$<CONFIG:Debug>>>:/O1 /Gy /GL>
-)
-
-target_link_options(TrafficMonitorCPA PRIVATE
-    $<$<NOT:$<CONFIG:Debug>>:/LTCG /OPT:REF /OPT:ICF>
-)
+target_include_directories(CPAQuota SYSTEM PRIVATE third_party/TrafficMonitor)
+target_include_directories(CPAQuota PRIVATE ${CMAKE_CURRENT_BINARY_DIR})
+target_link_libraries(CPAQuota PRIVATE cpa_core winhttp crypt32)
 
 configure_file(src/version.h.in version.h @ONLY)
+
+include(CTest)
+if(BUILD_TESTING)
+    add_executable(cpa_tests tests/quota_tests.cpp)
+    target_link_libraries(cpa_tests PRIVATE cpa_core)
+    add_test(NAME cpa_tests COMMAND cpa_tests)
+endif()

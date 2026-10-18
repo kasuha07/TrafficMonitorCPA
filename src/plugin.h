@@ -1,25 +1,43 @@
 #pragma once
 
+#include <array>
+#include <cstdint>
+#include <memory>
+#include <mutex>
 #include <string>
 
 #include "PluginInterface.h"
+#include "cpa_client.h"
 
 namespace cpa {
 
-// 单个显示项目。数值在 DataRequired 中刷新，Get* 只返回缓存的字符串。
-class CpaItem final : public IPluginItem
+enum class WindowKind { FiveHour, Weekly };
+
+// 一个显示项目 = 一种账号类型的一个额度窗口，显示所有该类型账号中最低的剩余百分比。
+class QuotaItem final : public IPluginItem
 {
 public:
-    const wchar_t* GetItemName() const override;
-    const wchar_t* GetItemId() const override;
-    const wchar_t* GetItemLableText() const override;
-    const wchar_t* GetItemValueText() const override;
-    const wchar_t* GetItemValueSampleText() const override;
+    QuotaItem(Provider provider, WindowKind window, const wchar_t* name, const wchar_t* id, const wchar_t* label);
 
-    void SetValue(std::wstring value) { value_ = std::move(value); }
+    const wchar_t* GetItemName() const override { return name_; }
+    const wchar_t* GetItemId() const override { return id_; }
+    const wchar_t* GetItemLableText() const override { return label_; }
+    const wchar_t* GetItemValueText() const override { return value_.c_str(); }
+    const wchar_t* GetItemValueSampleText() const override { return L"100%"; }
+    int IsDrawResourceUsageGraph() const override { return 1; }
+    float GetResourceUsageGraphValue() const override;
+
+    // 仅在主线程（DataRequired）中调用。
+    void Update(const Snapshot* snapshot);
 
 private:
+    Provider provider_;
+    WindowKind window_;
+    const wchar_t* name_;
+    const wchar_t* id_;
+    const wchar_t* label_;
     std::wstring value_{L"--"};
+    double remaining_ = -1;
 };
 
 class CpaPlugin final : public ITMPlugin
@@ -29,14 +47,40 @@ public:
 
     IPluginItem* GetItem(int index) override;
     void DataRequired() override;
+    OptionReturn ShowOptionsDialog(void* hParent) override;
     const wchar_t* GetInfo(PluginInfoIndex index) override;
+    const wchar_t* GetTooltipInfo() override;
+    void OnExtenedInfo(ExtendedInfoIndex index, const wchar_t* data) override;
     void OnInitialize(ITrafficMonitor* app) override;
+    int GetCommandCount() override { return 1; }
+    const wchar_t* GetCommandName(int index) override;
+    void OnPluginCommand(int index, void* hWnd, void* para) override;
 
 private:
-    CpaPlugin() = default;
+    CpaPlugin();
+
+    void EnsureConfigLoaded();
+    std::wstring ConfigPath() const;
+    void StartFetchIfDue(bool force);
+    std::wstring BuildTooltip() const;
 
     ITrafficMonitor* app_{};
-    CpaItem item_;
+    std::wstring config_dir_;
+    bool config_loaded_ = false;
+    Config config_;
+
+    // 以下成员只在主线程访问。
+    std::array<QuotaItem, 4> items_;
+    std::shared_ptr<const Snapshot> shown_;
+    std::wstring tooltip_;
+    int64_t last_fetch_ = 0;
+    bool paused_ = false;   // 管理密钥被拒绝后暂停自动刷新
+
+    // 后台线程与主线程之间的交接区。
+    std::mutex mutex_;
+    bool fetching_ = false;
+    uint64_t generation_ = 0;
+    std::shared_ptr<const Snapshot> pending_;
 };
 
 } // namespace cpa

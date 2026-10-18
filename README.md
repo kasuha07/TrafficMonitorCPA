@@ -1,17 +1,50 @@
-# TrafficMonitorCPA
+# CPAQuota
 
-[TrafficMonitor](https://github.com/zhongyang219/TrafficMonitor) 的轻量化插件（插件接口 API v8）。
+[TrafficMonitor](https://github.com/zhongyang219/TrafficMonitor) 插件：通过 [CLIProxyAPI](https://github.com/router-for-me/CLIProxyAPI)（CPA）的管理接口，在任务栏显示 CPA 中各账号的额度剩余。目前支持 **Codex** 和 **Claude** 账号的 5 小时额度和周额度。
 
-- 纯 Win32 + C++20，不依赖 MFC/ATL
-- 静态链接 CRT（`/MT`），DLL 只依赖 `KERNEL32.dll`，无需安装 VC++ 运行库
-- Release 使用 `/O1 /GL /LTCG /OPT:REF,ICF` 以减小体积
+## 显示项目
+
+| 标签 | 内容 |
+|---|---|
+| `X5h` / `X7d` | 所有 Codex 账号中 5 小时 / 7 天额度剩余百分比**最低**的值 |
+| `C5h` / `C7d` | 所有 Claude 账号中 5 小时 / 7 天额度剩余百分比**最低**的值 |
+
+- 每个项目都带资源占用图（剩余比例）。
+- 鼠标提示列出每个账号的套餐、各窗口剩余百分比和重置倒计时，以及获取失败的原因。
+- 插件命令「立即刷新额度」可手动刷新。Codex 团队账号的次级窗口是月度额度，提示中显示为「30d」，任务栏上仍计入 `X7d`。
+
+## 工作原理
+
+与 [Cli-Proxy-API-Management-Center](https://github.com/router-for-me/Cli-Proxy-API-Management-Center) 的额度页相同：
+
+1. `GET /v8/management/credentials` 获取账号列表（跳过已禁用的账号）。
+2. 对每个账号调用 `POST /v8/management/requests/api-call`，由 CPA 注入该账号的 token，请求上游用量接口：
+   - Codex：`https://chatgpt.com/backend-api/wham/usage`
+   - Claude：`https://api.anthropic.com/api/oauth/usage`
+3. 解析 Codex 的 `rate_limit.primary_window/secondary_window` 和 Claude 的 `five_hour/seven_day`。
+
+插件只需要 CPA 地址和管理密钥，不直接接触任何账号凭证。
+
+## 设置
+
+在 TrafficMonitor 的插件管理中打开「CPA 额度」的选项：
+
+- **CPA 地址**：默认 `http://127.0.0.1:8317`。
+- **管理密钥**：CPA 配置中的 `remote-management.secret-key`。远程访问 CPA 时还需开启 `remote-management.allow-remote`。
+- **刷新间隔**：15~3600 秒，默认 60 秒。
+
+「测试连接」会列出 CPA 中可用的 Codex / Claude 账号数。
+
+配置保存在 TrafficMonitor 插件配置目录（取不到时为 DLL 所在目录）的 `CPAQuota.ini`，管理密钥用 Windows DPAPI 按当前用户加密。
+
+> CPA 对同一 IP 连续 5 次管理密钥错误会封禁 30 分钟。插件收到 401/403 后会暂停自动刷新，修改设置或手动刷新后才会再次请求。
 
 ## 环境要求
 
 - Visual Studio 生成工具 2026（MSVC v145 / 14.50），Windows SDK 10.0.26100
 - CMake ≥ 3.25（需支持 `Visual Studio 18 2026` 生成器）
 
-## 构建
+## 构建与测试
 
 ```bash
 cmake --preset x64
@@ -21,23 +54,34 @@ cmake --preset x64
 cmake --build --preset x64-release
 ```
 
-32 位版本使用 `x86` / `x86-release` 预设。产物位于 `build/<arch>/<Config>/TrafficMonitorCPA.dll`。
+```bash
+ctest --test-dir build/x64 -C Release --output-on-failure
+```
+
+32 位版本使用 `x86` / `x86-release` 预设。产物位于 `build/<arch>/<Config>/CPAQuota.dll`，只依赖系统 DLL（静态链接 CRT）。
 
 ## 安装
 
-将与 TrafficMonitor 位数一致的 `TrafficMonitorCPA.dll` 复制到 TrafficMonitor 目录下的 `plugins` 文件夹，重启 TrafficMonitor，然后在「插件管理」中启用该插件，并在「显示设置」中勾选它的显示项目。
+将与 TrafficMonitor 位数一致的 `CPAQuota.dll` 复制到 TrafficMonitor 目录下的 `plugins` 文件夹，重启 TrafficMonitor，在插件选项中填写管理密钥，然后在「显示设置」中勾选需要的显示项目。
 
 ## 目录结构
 
 ```
-src/                          插件源码
-  plugin.h / plugin.cpp       ITMPlugin / IPluginItem 实现，导出 TMPluginGetInstance
-  version.h.in / version.rc   版本信息（来自 CMake project VERSION）
+src/
+  plugin.*          ITMPlugin / IPluginItem 实现，后台刷新与鼠标提示
+  cpa_client.*      调用 CPA 管理接口，汇总每个账号的额度
+  quota.*           账号列表、api-call、Codex/Claude 用量响应的解析（纯逻辑）
+  json.*            极简 JSON 解析器
+  http_client.*     WinHTTP 封装
+  config.*          ini 读写与 DPAPI 加密
+  options_dialog.*  选项对话框
+  plugin.rc         对话框与版本资源
+tests/              解析逻辑的单元测试（ctest）
 third_party/TrafficMonitor/   上游插件接口头文件 PluginInterface.h（勿修改）
 ```
 
 ## 开发约定
 
-- `IPluginItem::GetItemValueText` 等函数会被频繁调用，只返回缓存值；数据采集放在 `ITMPlugin::DataRequired` 中。
-- 不要重写 `ITMPlugin::GetAPIVersion`。
-- 升级插件接口时，从上游 `include/PluginInterface.h` 整体替换 `third_party/TrafficMonitor/PluginInterface.h`。
+- `IPluginItem` 的文本只在主线程（`DataRequired`）中更新；网络请求在后台线程进行，结果通过互斥量交接。
+- 上游请求头（User-Agent 等）与 Management Center 的 `src/utils/quota/constants.ts` 保持一致。
+- 不要重写 `ITMPlugin::GetAPIVersion`。升级插件接口时，从上游 `include/PluginInterface.h` 整体替换头文件。

@@ -1,5 +1,8 @@
 /build/
 /out/
+# 本地参考用的上游源码，不纳入版本管理
+/CLIProxyAPI/
+/Cli-Proxy-API-Management-Center/
 .vs/
 .vscode/
 .cache/
