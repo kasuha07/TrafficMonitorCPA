@@ -13,7 +13,7 @@ struct HttpResponse
     std::wstring error;       // 传输层错误
 };
 
-// 基于 WinHTTP 的同步客户端，面向单个 CPA 实例。不使用系统代理。
+// 基于 WinHTTP 的同步客户端，面向单个 CPA 实例。不使用系统代理。Get/PostJson 可在多个线程中同时调用。
 class HttpClient
 {
 public:

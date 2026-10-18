@@ -57,6 +57,12 @@ HttpClient::HttpClient(std::wstring base_url, std::wstring bearer_token, unsigne
     while (!base_url_.empty() && base_url_.back() == L'/') base_url_.pop_back();
     session_ = WinHttpOpen(L"CPAQuota", WINHTTP_ACCESS_TYPE_NO_PROXY,
                            WINHTTP_NO_PROXY_NAME, WINHTTP_NO_PROXY_BYPASS, 0);
+    // 会话可被多个线程同时使用，超时只在创建时设置一次。
+    if (session_) {
+        WinHttpSetTimeouts(static_cast<HINTERNET>(session_), static_cast<int>(timeout_ms_),
+                           static_cast<int>(timeout_ms_), static_cast<int>(timeout_ms_),
+                           static_cast<int>(timeout_ms_));
+    }
 }
 
 HttpClient::~HttpClient()
@@ -102,8 +108,6 @@ HttpResponse HttpClient::Send(const wchar_t* method, std::wstring_view path, std
     std::wstring object = std::wstring(url_path) + extra;
 
     auto* session = static_cast<HINTERNET>(session_);
-    WinHttpSetTimeouts(session, static_cast<int>(timeout_ms_), static_cast<int>(timeout_ms_),
-                       static_cast<int>(timeout_ms_), static_cast<int>(timeout_ms_));
 
     Handle connect{WinHttpConnect(session, host, uc.nPort, 0)};
     if (!connect.h) {

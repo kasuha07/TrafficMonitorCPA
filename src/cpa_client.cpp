@@ -1,10 +1,13 @@
 #include "cpa_client.h"
 
+#include <algorithm>
+#include <atomic>
 #include <cctype>
 #include <ctime>
 #include <map>
 #include <mutex>
 #include <optional>
+#include <thread>
 
 #include "http_client.h"
 #include "json.h"
@@ -375,16 +378,18 @@ Snapshot FetchSnapshot(const Config& config, const Snapshot* previous, bool forc
         return snap;
     }
 
+    // 先确定哪些账号需要请求（冷却中的直接沿用），保持账号列表的顺序。
+    std::vector<size_t> pending;
+    const int64_t start = static_cast<int64_t>(std::time(nullptr));
     for (Account& a : creds.accounts) {
         if (a.disabled || !config.IsEnabled(a.provider)) continue;
-        const int64_t now = static_cast<int64_t>(std::time(nullptr));
 
         if (config.smart_cooldown && !force) {
             const AccountQuota* prev = FindPrevious(previous, a);
-            if (prev && CooldownUntil(*prev, now) > now) {
+            if (prev && CooldownUntil(*prev, start) > start) {
                 AccountQuota q = *prev;
                 q.account = std::move(a);  // 账号元数据（邮箱、备注等）用最新的
-                ProjectResets(q, now);
+                ProjectResets(q, start);
                 q.cooled = true;
                 q.stale = false;
                 snap.accounts.push_back(std::move(q));
@@ -394,11 +399,28 @@ Snapshot FetchSnapshot(const Config& config, const Snapshot* previous, bool forc
 
         AccountQuota q;
         q.account = std::move(a);
-        FetchAccountQuota(http, q, now);
-        if (q.ok) q.data_at = now;
-        else CarryOverOnFailure(FindPrevious(previous, q.account), q);
+        pending.push_back(snap.accounts.size());
         snap.accounts.push_back(std::move(q));
     }
+
+    // 最多 kMaxConcurrency 个账号同时请求，避免一个慢上游拖慢整轮刷新。
+    constexpr size_t kMaxConcurrency = 4;
+    std::atomic<size_t> next{0};
+    auto worker = [&]() {
+        for (size_t i = next++; i < pending.size(); i = next++) {
+            AccountQuota& q = snap.accounts[pending[i]];
+            const int64_t now = static_cast<int64_t>(std::time(nullptr));
+            FetchAccountQuota(http, q, now);
+            if (q.ok) q.data_at = now;
+            else CarryOverOnFailure(FindPrevious(previous, q.account), q);
+        }
+    };
+    std::vector<std::thread> threads;
+    const size_t thread_count = std::min(kMaxConcurrency, pending.size());
+    for (size_t i = 1; i < thread_count; ++i) threads.emplace_back(worker);
+    if (thread_count > 0) worker();  // 当前线程也参与
+    for (std::thread& t : threads) t.join();
+
     snap.ok = true;
     return snap;
 }
