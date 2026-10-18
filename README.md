@@ -67,7 +67,11 @@ ctest --test-dir build/x64 -C Release --output-on-failure
 
 GitHub Actions（`.github/workflows/build.yml`）在推送到 `main` 和 Pull Request 时编译 x64 / x86 并运行测试，产物可在 Actions 运行页下载。
 
-在 GitHub 上发布 Release（标签形如 `v1.2.3`）后，工作流会以该版本号编译，并把 `CPAQuota-1.2.3-x64.zip`、`CPAQuota-1.2.3-x86.zip` 附加到该 Release。本地构建默认版本为 `0.1.0`，可用 `-DCPA_VERSION=x.y.z` 覆盖。
+在 GitHub 上发布 Release（标签形如 `v1.2.3`）后，工作流会以该版本号编译，并把 `CPAQuota-1.2.3-x64.zip`、`CPAQuota-1.2.3-x86.zip` 附加到该 Release。GitHub 会在 Release 页面为每个附件显示 SHA-256 摘要，下载后可这样校验：
+
+```bash
+Get-FileHash CPAQuota-1.2.3-x64.zip -Algorithm SHA256
+```本地构建默认版本为 `0.1.0`，可用 `-DCPA_VERSION=x.y.z` 覆盖。
 
 ## 安装
 
@@ -94,3 +98,7 @@ third_party/TrafficMonitor/   上游插件接口头文件 PluginInterface.h（�
 - `IPluginItem` 的文本只在主线程（`DataRequired`）中更新；网络请求在后台线程进行，结果通过互斥量交接。
 - 上游请求头（User-Agent 等）与 Management Center 的 `src/utils/quota/constants.ts` 保持一致。
 - 不要重写 `ITMPlugin::GetAPIVersion`。升级插件接口时，从上游 `include/PluginInterface.h` 整体替换头文件。
+
+## 许可证
+
+[MIT](LICENSE)。`third_party/TrafficMonitor/PluginInterface.h` 来自 TrafficMonitor，遵循其 [Anti 996 License](third_party/TrafficMonitor/LICENSE)。
