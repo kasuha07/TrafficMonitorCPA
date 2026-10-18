@@ -63,6 +63,12 @@ ctest --test-dir build/x64 -C Release --output-on-failure
 
 32 位版本使用 `x86` / `x86-release` 预设。产物位于 `build/<arch>/<Config>/CPAQuota.dll`，只依赖系统 DLL（静态链接 CRT）。
 
+## CI 与发布
+
+GitHub Actions（`.github/workflows/build.yml`）在推送到 `main` 和 Pull Request 时编译 x64 / x86 并运行测试，产物可在 Actions 运行页下载。
+
+在 GitHub 上发布 Release（标签形如 `v1.2.3`）后，工作流会以该版本号编译，并把 `CPAQuota-1.2.3-x64.zip`、`CPAQuota-1.2.3-x86.zip` 附加到该 Release。本地构建默认版本为 `0.1.0`，可用 `-DCPA_VERSION=x.y.z` 覆盖。
+
 ## 安装
 
 将与 TrafficMonitor 位数一致的 `CPAQuota.dll` 复制到 TrafficMonitor 目录下的 `plugins` 文件夹，重启 TrafficMonitor，在插件选项中填写管理密钥，然后在「显示设置」中勾选需要的显示项目。
@@ -80,7 +86,7 @@ src/
   options_dialog.*  选项对话框
   plugin.rc         对话框与版本资源
 tests/              解析逻辑的单元测试（ctest）
-third_party/TrafficMonitor/   上游插件接口头文件 PluginInterface.h（勿修改）
+third_party/TrafficMonitor/   上游插件接口头文件 PluginInterface.h（勿修改）及其许可证（Anti 996 License）
 ```
 
 ## 开发约定

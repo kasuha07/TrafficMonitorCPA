@@ -1,0 +1,80 @@
+name: Build
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  release:
+    types: [published]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: Build (${{ matrix.arch }})
+    runs-on: windows-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: x64
+            platform: x64
+          - arch: x86
+            platform: Win32
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Resolve version
+        id: version
+        shell: pwsh
+        run: |
+          $version = '0.1.0'
+          if ('${{ github.event_name }}' -eq 'release') {
+            $version = '${{ github.event.release.tag_name }}' -replace '^v', ''
+            if ($version -notmatch '^\d+\.\d+\.\d+$') {
+              throw "Release tag must look like v1.2.3, got '${{ github.event.release.tag_name }}'"
+            }
+          }
+          "version=$version" >> $env:GITHUB_OUTPUT
+
+      # Uses the newest Visual Studio on the runner; CMakePresets.json pins VS 2026 for local builds.
+      - name: Configure
+        # Quoted: PowerShell splits unquoted "-DX=1.2.3" at the first dot.
+        run: cmake -S . -B build -A ${{ matrix.platform }} "-DCPA_VERSION=${{ steps.version.outputs.version }}"
+
+      - name: Build
+        run: cmake --build build --config Release
+
+      - name: Test
+        run: ctest --test-dir build -C Release --output-on-failure
+
+      - name: Package
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force dist | Out-Null
+          Compress-Archive -Path build/Release/CPAQuota.dll -DestinationPath dist/CPAQuota-${{ steps.version.outputs.version }}-${{ matrix.arch }}.zip
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: CPAQuota-${{ matrix.arch }}
+          path: dist/*.zip
+
+  release:
+    name: Attach to release
+    if: github.event_name == 'release'
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+
+      - name: Upload release assets
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release upload "${{ github.event.release.tag_name }}" dist/*.zip --clobber --repo "${{ github.repository }}"
