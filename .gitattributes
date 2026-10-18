@@ -1,0 +1,3 @@
+* text=auto
+*.rc   text eol=crlf
+*.json text eol=lf
