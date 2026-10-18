@@ -14,6 +14,7 @@ namespace {
 
 // 与 Cli-Proxy-API-Management-Center (src/utils/quota/constants.ts) 保持一致。
 constexpr char kCodexUsageUrl[] = "https://chatgpt.com/backend-api/wham/usage";
+constexpr char kCodexResetCreditsUrl[] = "https://chatgpt.com/backend-api/wham/rate-limit-reset-credits";
 constexpr char kCodexUserAgent[] =
     "codex-tui/0.149.1 (Mac OS 26.5.2; arm64) iTerm.app/3.6.11 (codex-tui; 0.149.1)";
 constexpr char kClaudeUsageUrl[] = "https://api.anthropic.com/api/oauth/usage";
@@ -167,6 +168,23 @@ void FetchAntigravityQuota(HttpClient& http, AccountQuota& q)
     q.error = last_error;
 }
 
+// 重置卡明细是可选信息：失败时保留用量响应里的数量，不影响额度显示。
+void FetchCodexResetCredits(HttpClient& http, AccountQuota& q, Headers headers)
+{
+    headers.emplace_back("Accept", "application/json");
+    headers.emplace_back("OpenAI-Beta", "codex-1");
+    headers.emplace_back("Originator", "Codex Desktop");
+    std::string body;
+    std::wstring error;
+    if (!CallUpstream(http, q.account, "GET", kCodexResetCreditsUrl, headers, {}, body, error)) return;
+
+    ResetCredits detail;
+    std::string err;
+    if (!ParseCodexResetCredits(body, detail, &err)) return;
+    if (detail.available >= 0) q.reset_credits.available = detail.available;
+    q.reset_credits.soonest_expiry = detail.soonest_expiry;
+}
+
 void FetchAccountQuota(HttpClient& http, AccountQuota& q, int64_t now)
 {
     const Account& a = q.account;
@@ -211,6 +229,8 @@ void FetchAccountQuota(HttpClient& http, AccountQuota& q, int64_t now)
     }
     if (q.plan.empty()) q.plan = a.plan;
     q.ok = true;
+
+    if (a.provider == Provider::Codex) FetchCodexResetCredits(http, q, headers);
 }
 
 } // namespace

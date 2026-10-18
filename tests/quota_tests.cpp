@@ -136,6 +136,36 @@ static void TestCodexUsage()
     CHECK(!ParseCodexUsage(R"({"detail":"Unauthorized"})", now, bad, &err));
 }
 
+static void TestCodexResetCredits()
+{
+    std::string err;
+    AccountQuota q;
+    CHECK(ParseCodexUsage(R"({"rate_limit":{"primary_window":{"used_percent":1}},
+        "rate_limit_reset_credits":{"available_count":3}})", 1792324800, q, &err));
+    CHECK(q.reset_credits.available == 3);
+
+    ResetCredits rc;
+    CHECK(ParseCodexResetCredits(R"({"credits":[
+        {"id":"a","reset_type":"codex_rate_limits","status":"available","expires_at":"2026-10-25T00:00:00Z"},
+        {"id":"b","reset_type":"codex_rate_limits","status":"available","expires_at":"2026-10-20T00:00:00Z"},
+        {"id":"c","reset_type":"codex_rate_limits","status":"consumed","expires_at":"2026-10-19T00:00:00Z"},
+        {"id":"d","reset_type":"other","status":"available","expires_at":"2026-10-19T00:00:00Z"}]})", rc, &err));
+    CHECK(rc.available == 2);
+    CHECK(rc.soonest_expiry == 1792454400);  // 2026-10-20T00:00:00Z
+
+    ResetCredits counted;
+    CHECK(ParseCodexResetCredits(R"({"available_count":5,"credits":[]})", counted, &err));
+    CHECK(counted.available == 5);
+    CHECK(counted.soonest_expiry == 0);
+
+    ResetCredits empty;
+    CHECK(ParseCodexResetCredits(R"({"credits":[]})", empty, &err));
+    CHECK(empty.available == -1);  // 留给用量响应中的数量兜底
+
+    ResetCredits bad;
+    CHECK(!ParseCodexResetCredits(R"({"detail":"x"})", bad, &err));
+}
+
 static void TestClaudeUsage()
 {
     std::string err;
@@ -205,6 +235,7 @@ int main()
     TestCredentials();
     TestApiCall();
     TestCodexUsage();
+    TestCodexResetCredits();
     TestClaudeUsage();
     if (g_failures) {
         std::printf("%d check(s) failed\n", g_failures);

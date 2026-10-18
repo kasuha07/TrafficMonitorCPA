@@ -235,6 +235,11 @@ std::wstring CpaPlugin::BuildTooltip() const
                     tip += L"\n    " + Utf8ToWide(g.name) + L": " + windows(g.five_hour, g.weekly);
             } else {
                 tip += L" " + windows(q.five_hour, q.weekly);
+                const ResetCredits& rc = q.reset_credits;
+                if (rc.available > 0) {
+                    tip += L" · 重置卡*" + std::to_wstring(rc.available);
+                    if (rc.soonest_expiry > now) tip += L" (" + FormatDuration(rc.soonest_expiry - now) + L")";
+                }
             }
         }
     }

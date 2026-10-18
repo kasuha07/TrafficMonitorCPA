@@ -277,10 +277,55 @@ bool ParseCodexUsage(std::string_view body, int64_t now, AccountQuota& out, std:
 
     out.five_hour = BuildCodexWindow(five, limit_reached, now);
     out.weekly = BuildCodexWindow(week, limit_reached, now);
+
+    // 用量响应里也带有重置卡数量，作为单独接口失败时的兜底。
+    if (const json::Value* credits = root->FindAny({"rate_limit_reset_credits", "rateLimitResetCredits"});
+        credits && credits->IsObject()) {
+        if (auto n = NumberOf(credits->FindAny({"available_count", "availableCount"})))
+            out.reset_credits.available = static_cast<int>(*n);
+    }
     if (!out.five_hour.present && !out.weekly.present) {
         if (error) *error = "usage response has no quota windows";
         return false;
     }
+    return true;
+}
+
+bool ParseCodexResetCredits(std::string_view body, ResetCredits& out, std::string* error)
+{
+    auto root = ParseObject(body, error);
+    if (!root) return false;
+    const json::Value* count = root->FindAny({"available_count", "availableCount"});
+    const json::Value* credits = root->Find("credits");
+    if (!count && !credits) {
+        if (error) *error = "reset credits response has unexpected shape";
+        return false;
+    }
+
+    // 只统计 codex_rate_limits 类型、状态为 available 且带过期时间的卡。
+    int listed = 0;
+    int64_t soonest = 0;
+    if (credits && credits->IsArray()) {
+        for (const json::Value& c : credits->Items()) {
+            if (!c.IsObject()) continue;
+            if (StringOf(c.FindAny({"reset_type", "resetType"})) != "codex_rate_limits") continue;
+            if (StringOf(c.Find("status")) != "available") continue;
+            std::string expires = StringOf(c.FindAny({"expires_at", "expiresAt"}));
+            if (expires.empty()) continue;
+            ++listed;
+            auto t = ParseIso8601(expires);
+            if (!t) {
+                if (auto n = NumberOf(c.FindAny({"expires_at", "expiresAt"}))) t = NormalizeUnix(*n);
+            }
+            if (t && (soonest == 0 || *t < soonest)) soonest = *t;
+        }
+    }
+
+    ResetCredits result;
+    if (auto n = NumberOf(count)) result.available = static_cast<int>(*n);
+    else if (listed > 0) result.available = listed;
+    result.soonest_expiry = soonest;
+    out = result;
     return true;
 }
 

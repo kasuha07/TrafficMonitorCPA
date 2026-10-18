@@ -47,6 +47,13 @@ struct QuotaGroup
     QuotaWindow weekly;
 };
 
+// Codex 的额度重置卡（rate-limit reset credits）。
+struct ResetCredits
+{
+    int available = -1;          // 可用数量；-1 表示未知
+    int64_t soonest_expiry = 0;  // 最早过期的可用卡的过期时间（Unix 秒）；0 表示未知
+};
+
 struct AccountQuota
 {
     Account account;
@@ -57,6 +64,7 @@ struct AccountQuota
     QuotaWindow five_hour;
     QuotaWindow weekly;
     std::vector<QuotaGroup> groups;   // 仅 Antigravity
+    ResetCredits reset_credits;       // 仅 Codex
 };
 
 Provider ParseProvider(std::string_view raw);
@@ -86,6 +94,9 @@ std::string ExtractErrorMessage(std::string_view body);
 
 // 解析 Codex wham/usage 响应。now 为当前 Unix 秒（用于 reset_after_seconds）。
 bool ParseCodexUsage(std::string_view body, int64_t now, AccountQuota& out, std::string* error);
+
+// 解析 Codex wham/rate-limit-reset-credits 响应（与 Management Center 的 resetCredits.ts 一致）。
+bool ParseCodexResetCredits(std::string_view body, ResetCredits& out, std::string* error);
 
 // 解析 Claude oauth/usage 响应。
 bool ParseClaudeUsage(std::string_view body, AccountQuota& out, std::string* error);
