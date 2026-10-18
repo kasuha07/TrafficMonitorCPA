@@ -14,10 +14,10 @@ struct Config
     std::wstring management_key;
     unsigned refresh_seconds = 300;
 
-    // 未启用的账号类型不会请求上游，也不会出现在任务栏和鼠标提示中。
-    bool enable_codex = true;
-    bool enable_claude = true;
-    bool enable_antigravity = true;
+    // 未启用的账号类型不会请求上游，也不会出现在任务栏和鼠标提示中。默认全部关闭，需在选项中勾选。
+    bool enable_codex = false;
+    bool enable_claude = false;
+    bool enable_antigravity = false;
 
     AggregateMode aggregate = AggregateMode::Min;
 

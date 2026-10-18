@@ -88,9 +88,9 @@ Config LoadConfig(const std::wstring& ini_path)
     c.management_key = Unprotect(ReadString(ini_path, L"ManagementKey", L""));
     UINT refresh = GetPrivateProfileIntW(kSection, L"RefreshSeconds", 300, ini_path.c_str());
     c.refresh_seconds = refresh < 15 ? 15 : (refresh > 3600 ? 3600 : refresh);
-    c.enable_codex = GetPrivateProfileIntW(kSection, L"EnableCodex", 1, ini_path.c_str()) != 0;
-    c.enable_claude = GetPrivateProfileIntW(kSection, L"EnableClaude", 1, ini_path.c_str()) != 0;
-    c.enable_antigravity = GetPrivateProfileIntW(kSection, L"EnableAntigravity", 1, ini_path.c_str()) != 0;
+    c.enable_codex = GetPrivateProfileIntW(kSection, L"EnableCodex", 0, ini_path.c_str()) != 0;
+    c.enable_claude = GetPrivateProfileIntW(kSection, L"EnableClaude", 0, ini_path.c_str()) != 0;
+    c.enable_antigravity = GetPrivateProfileIntW(kSection, L"EnableAntigravity", 0, ini_path.c_str()) != 0;
     UINT aggregate = GetPrivateProfileIntW(kSection, L"Aggregate", 0, ini_path.c_str());
     c.aggregate = aggregate <= 3 ? static_cast<AggregateMode>(aggregate) : AggregateMode::Min;
     c.skip_tls_verify = GetPrivateProfileIntW(kSection, L"SkipTlsVerify", 0, ini_path.c_str()) != 0;

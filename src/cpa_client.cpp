@@ -339,6 +339,10 @@ Snapshot FetchSnapshot(const Config& config)
         snap.error = L"未设置 CPA 管理密钥，请在插件选项中配置";
         return snap;
     }
+    if (!config.enable_codex && !config.enable_claude && !config.enable_antigravity) {
+        snap.error = L"未勾选任何账号类型，请在插件选项的「查询账号」中勾选";
+        return snap;
+    }
 
     HttpClient http(config.base_url, config.management_key, 20000, config.skip_tls_verify);
     CredentialsResult creds = FetchCredentials(http);
