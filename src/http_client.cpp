@@ -54,13 +54,52 @@ std::wstring LastErrorText(const wchar_t* what)
 
 } // namespace
 
-HttpClient::HttpClient(std::wstring base_url, std::wstring bearer_token, unsigned timeout_ms, bool skip_tls_verify)
+bool NormalizeProxy(std::wstring_view input, std::wstring& out)
+{
+    size_t b = input.find_first_not_of(L" \t");
+    size_t e = input.find_last_not_of(L" \t");
+    if (b == std::wstring_view::npos) return false;
+    std::wstring s(input.substr(b, e - b + 1));
+    while (!s.empty() && s.back() == L'/') s.pop_back();
+
+    std::wstring host_port = s;
+    if (size_t scheme = s.find(L"://"); scheme != std::wstring::npos) {
+        if (_wcsicmp(s.substr(0, scheme).c_str(), L"http") != 0) return false;  // socks5:// 等 WinHTTP 不支持
+        host_port = s.substr(scheme + 3);
+    }
+    // 只接受 host:port，不含路径、空白和用户名密码。
+    if (host_port.empty() || host_port.find_first_of(L"/@ \t;=") != std::wstring::npos) return false;
+    size_t colon = host_port.rfind(L':');
+    if (colon == std::wstring::npos || colon == 0 || colon + 1 == host_port.size()) return false;
+    for (size_t i = colon + 1; i < host_port.size(); ++i)
+        if (host_port[i] < L'0' || host_port[i] > L'9') return false;
+    int port = _wtoi(host_port.c_str() + colon + 1);
+    if (port <= 0 || port > 65535) return false;
+    out = L"http://" + host_port;
+    return true;
+}
+
+HttpClient::HttpClient(std::wstring base_url, std::wstring bearer_token, unsigned timeout_ms, bool skip_tls_verify,
+                       ProxyMode proxy_mode, std::wstring_view proxy)
     : base_url_(std::move(base_url)), token_(std::move(bearer_token)), timeout_ms_(timeout_ms),
       skip_tls_verify_(skip_tls_verify)
 {
     while (!base_url_.empty() && base_url_.back() == L'/') base_url_.pop_back();
-    session_ = WinHttpOpen(L"CPAQuota", WINHTTP_ACCESS_TYPE_NO_PROXY,
-                           WINHTTP_NO_PROXY_NAME, WINHTTP_NO_PROXY_BYPASS, 0);
+    if (proxy_mode == ProxyMode::System) {
+        // 跟随系统代理设置（含自动配置脚本，需要 Windows 8.1+）；不支持时退回 IE/netsh 中的静态代理。
+        session_ = WinHttpOpen(L"CPAQuota", WINHTTP_ACCESS_TYPE_AUTOMATIC_PROXY,
+                               WINHTTP_NO_PROXY_NAME, WINHTTP_NO_PROXY_BYPASS, 0);
+        if (!session_)
+            session_ = WinHttpOpen(L"CPAQuota", WINHTTP_ACCESS_TYPE_DEFAULT_PROXY,
+                                   WINHTTP_NO_PROXY_NAME, WINHTTP_NO_PROXY_BYPASS, 0);
+    } else if (proxy_mode == ProxyMode::Custom) {
+        std::wstring name(proxy);
+        session_ = WinHttpOpen(L"CPAQuota", WINHTTP_ACCESS_TYPE_NAMED_PROXY, name.c_str(),
+                               WINHTTP_NO_PROXY_BYPASS, 0);
+    } else {
+        session_ = WinHttpOpen(L"CPAQuota", WINHTTP_ACCESS_TYPE_NO_PROXY,
+                               WINHTTP_NO_PROXY_NAME, WINHTTP_NO_PROXY_BYPASS, 0);
+    }
     // 会话可被多个线程同时使用，超时只在创建时设置一次。
     if (session_) {
         WinHttpSetTimeouts(static_cast<HINTERNET>(session_), static_cast<int>(timeout_ms_),

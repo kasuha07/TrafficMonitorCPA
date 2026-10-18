@@ -68,6 +68,7 @@ struct AccountQuota
     bool cooled = false;              // 本次因冷却未请求，沿用上次数据
     bool stale = false;               // 本次请求失败，沿用上次成功的数据（error 为失败原因）
     int failures = 0;                 // 连续失败次数
+    bool credential_invalid = false;  // 本次失败是因为凭证失效（上游 401 或 CPA 无法刷新 token）
     int64_t data_at = 0;              // 数据获取时间（Unix 秒）
 };
 
@@ -124,6 +125,11 @@ std::optional<ApiCallResult> ParseApiCallResponse(std::string_view body, std::st
 
 // 从上游/管理接口的错误响应体中提取可读信息。
 std::string ExtractErrorMessage(std::string_view body);
+
+// 判断一次 api-call 失败是否说明账号凭证已失效（需要在 CPA 中重新登录）：
+// CPA 返回 400 且无法取得 token（刷新失败等），或上游返回 401。
+// cpa_status/cpa_body 为 api-call 本身的响应；upstream_status 为上游状态码（CPA 未成功转发时为 0）。
+bool IsCredentialFailure(unsigned cpa_status, std::string_view cpa_body, unsigned upstream_status);
 
 // 解析 Codex wham/usage 响应。now 为当前 Unix 秒（用于 reset_after_seconds）。
 bool ParseCodexUsage(std::string_view body, int64_t now, AccountQuota& out, std::string* error);

@@ -6,28 +6,32 @@
 
 LANGUAGE LANG_CHINESE, SUBLANG_CHINESE_SIMPLIFIED
 
-IDD_OPTIONS DIALOGEX 0, 0, 440, 218
+IDD_OPTIONS DIALOGEX 0, 0, 440, 248
 STYLE DS_SETFONT | DS_SHELLFONT | DS_MODALFRAME | DS_CENTER | WS_POPUP | WS_CAPTION | WS_SYSMENU
 CAPTION "CPAQuota 选项"
 FONT 9, "Microsoft YaHei UI", 400, 0, 0x86
 BEGIN
     // 左列：连接、查询
-    GROUPBOX        "连接", IDC_STATIC, 7, 5, 210, 72
+    GROUPBOX        "连接", IDC_STATIC, 7, 5, 210, 102
     LTEXT           "CPA 地址：", IDC_STATIC, 15, 19, 52, 10
     EDITTEXT        IDC_URL, 70, 17, 140, 13, ES_AUTOHSCROLL
     LTEXT           "管理密钥：", IDC_STATIC, 15, 37, 52, 10
     EDITTEXT        IDC_KEY, 70, 35, 140, 13, ES_AUTOHSCROLL | ES_PASSWORD
     AUTOCHECKBOX    "跳过 HTTPS 证书校验（自签名证书用，不安全）", IDC_SKIP_TLS_VERIFY, 15, 54, 195, 12
+    LTEXT           "代理：", IDC_STATIC, 15, 73, 52, 10
+    COMBOBOX        IDC_PROXY_MODE, 70, 71, 140, 60, CBS_DROPDOWNLIST | WS_VSCROLL | WS_TABSTOP
+    LTEXT           "代理地址：", IDC_STATIC, 15, 91, 52, 10
+    EDITTEXT        IDC_PROXY, 70, 89, 140, 13, ES_AUTOHSCROLL
 
-    GROUPBOX        "查询", IDC_STATIC, 7, 82, 210, 72
-    LTEXT           "账号类型：", IDC_STATIC, 15, 96, 52, 10
-    AUTOCHECKBOX    "Codex", IDC_ENABLE_CODEX, 70, 95, 45, 12
-    AUTOCHECKBOX    "Claude", IDC_ENABLE_CLAUDE, 118, 95, 45, 12
-    AUTOCHECKBOX    "Antigravity", IDC_ENABLE_ANTIGRAVITY, 164, 95, 50, 12
-    LTEXT           "刷新间隔：", IDC_STATIC, 15, 114, 52, 10
-    EDITTEXT        IDC_REFRESH, 70, 112, 40, 13, ES_AUTOHSCROLL | ES_NUMBER
-    LTEXT           "秒", IDC_STATIC, 114, 114, 20, 10
-    AUTOCHECKBOX    "智能冷却（额度用尽的账号在重置前跳过查询）", IDC_SMART_COOLDOWN, 15, 131, 195, 12
+    GROUPBOX        "查询", IDC_STATIC, 7, 112, 210, 72
+    LTEXT           "账号类型：", IDC_STATIC, 15, 126, 52, 10
+    AUTOCHECKBOX    "Codex", IDC_ENABLE_CODEX, 70, 125, 45, 12
+    AUTOCHECKBOX    "Claude", IDC_ENABLE_CLAUDE, 118, 125, 45, 12
+    AUTOCHECKBOX    "Antigravity", IDC_ENABLE_ANTIGRAVITY, 164, 125, 50, 12
+    LTEXT           "刷新间隔：", IDC_STATIC, 15, 144, 52, 10
+    EDITTEXT        IDC_REFRESH, 70, 142, 40, 13, ES_AUTOHSCROLL | ES_NUMBER
+    LTEXT           "秒", IDC_STATIC, 114, 144, 20, 10
+    AUTOCHECKBOX    "智能冷却（额度用尽的账号在重置前跳过查询）", IDC_SMART_COOLDOWN, 15, 161, 195, 12
 
     // 右列：显示、提醒
     GROUPBOX        "显示", IDC_STATIC, 225, 5, 208, 94
@@ -39,41 +43,47 @@ BEGIN
     LTEXT           "双击显示项：", IDC_STATIC, 233, 83, 52, 10
     COMBOBOX        IDC_DOUBLE_CLICK, 288, 81, 138, 60, CBS_DROPDOWNLIST | WS_VSCROLL | WS_TABSTOP
 
-    GROUPBOX        "提醒", IDC_STATIC, 225, 104, 208, 50
+    GROUPBOX        "提醒", IDC_STATIC, 225, 104, 208, 80
     LTEXT           "低额度提醒：", IDC_STATIC, 233, 119, 52, 10
     EDITTEXT        IDC_ALERT, 288, 117, 30, 13, ES_AUTOHSCROLL | ES_NUMBER
     LTEXT           "%", IDC_STATIC, 321, 119, 10, 10
     LTEXT           "任一窗口剩余低于此值时通知，0 为关闭", IDC_STATIC, 233, 136, 195, 10
+    AUTOCHECKBOX    "账号凭证失效时通知（需在 CPA 重新登录）", IDC_NOTIFY_CREDENTIAL, 233, 150, 195, 12
+    AUTOCHECKBOX    "用尽的额度恢复时通知", IDC_NOTIFY_RESTORE, 233, 165, 195, 12
 
-    LTEXT           "", IDC_STATUS, 7, 160, 426, 30
-    PUSHBUTTON      "测试连接", IDC_TEST, 7, 196, 60, 14
-    DEFPUSHBUTTON   "确定", IDOK, 323, 196, 52, 14
-    PUSHBUTTON      "取消", IDCANCEL, 381, 196, 52, 14
+    LTEXT           "", IDC_STATUS, 7, 190, 426, 30
+    PUSHBUTTON      "测试连接", IDC_TEST, 7, 226, 60, 14
+    DEFPUSHBUTTON   "确定", IDOK, 323, 226, 52, 14
+    PUSHBUTTON      "取消", IDCANCEL, 381, 226, 52, 14
 END
 
 LANGUAGE LANG_ENGLISH, SUBLANG_ENGLISH_US
 
-IDD_OPTIONS_EN DIALOGEX 0, 0, 440, 218
+IDD_OPTIONS_EN DIALOGEX 0, 0, 440, 248
 STYLE DS_SETFONT | DS_SHELLFONT | DS_MODALFRAME | DS_CENTER | WS_POPUP | WS_CAPTION | WS_SYSMENU
 CAPTION "CPAQuota Options"
 FONT 9, "Segoe UI", 400, 0, 0x1
 BEGIN
-    GROUPBOX        "Connection", IDC_STATIC, 7, 5, 210, 72
+    GROUPBOX        "Connection", IDC_STATIC, 7, 5, 210, 102
     LTEXT           "CPA URL:", IDC_STATIC, 15, 19, 60, 10
     EDITTEXT        IDC_URL, 78, 17, 132, 13, ES_AUTOHSCROLL
     LTEXT           "Management key:", IDC_STATIC, 15, 37, 60, 10
     EDITTEXT        IDC_KEY, 78, 35, 132, 13, ES_AUTOHSCROLL | ES_PASSWORD
     AUTOCHECKBOX    "Skip HTTPS certificate check (insecure)", IDC_SKIP_TLS_VERIFY, 15, 54, 195, 12
+    LTEXT           "Proxy:", IDC_STATIC, 15, 73, 60, 10
+    COMBOBOX        IDC_PROXY_MODE, 78, 71, 132, 60, CBS_DROPDOWNLIST | WS_VSCROLL | WS_TABSTOP
+    LTEXT           "Proxy address:", IDC_STATIC, 15, 91, 60, 10
+    EDITTEXT        IDC_PROXY, 78, 89, 132, 13, ES_AUTOHSCROLL
 
-    GROUPBOX        "Query", IDC_STATIC, 7, 82, 210, 72
-    LTEXT           "Accounts:", IDC_STATIC, 15, 96, 60, 10
-    AUTOCHECKBOX    "Codex", IDC_ENABLE_CODEX, 78, 95, 40, 12
-    AUTOCHECKBOX    "Claude", IDC_ENABLE_CLAUDE, 120, 95, 42, 12
-    AUTOCHECKBOX    "Antigravity", IDC_ENABLE_ANTIGRAVITY, 164, 95, 50, 12
-    LTEXT           "Refresh every:", IDC_STATIC, 15, 114, 60, 10
-    EDITTEXT        IDC_REFRESH, 78, 112, 40, 13, ES_AUTOHSCROLL | ES_NUMBER
-    LTEXT           "seconds", IDC_STATIC, 122, 114, 40, 10
-    AUTOCHECKBOX    "Smart cooldown: skip exhausted accounts until reset", IDC_SMART_COOLDOWN, 15, 131, 195, 12
+    GROUPBOX        "Query", IDC_STATIC, 7, 112, 210, 72
+    LTEXT           "Accounts:", IDC_STATIC, 15, 126, 60, 10
+    AUTOCHECKBOX    "Codex", IDC_ENABLE_CODEX, 78, 125, 40, 12
+    AUTOCHECKBOX    "Claude", IDC_ENABLE_CLAUDE, 120, 125, 42, 12
+    AUTOCHECKBOX    "Antigravity", IDC_ENABLE_ANTIGRAVITY, 164, 125, 50, 12
+    LTEXT           "Refresh every:", IDC_STATIC, 15, 144, 60, 10
+    EDITTEXT        IDC_REFRESH, 78, 142, 40, 13, ES_AUTOHSCROLL | ES_NUMBER
+    LTEXT           "seconds", IDC_STATIC, 122, 144, 40, 10
+    AUTOCHECKBOX    "Smart cooldown: skip exhausted accounts until reset", IDC_SMART_COOLDOWN, 15, 161, 195, 12
 
     GROUPBOX        "Display", IDC_STATIC, 225, 5, 208, 94
     LTEXT           "Multi-account:", IDC_STATIC, 233, 19, 60, 10
@@ -84,16 +94,18 @@ BEGIN
     LTEXT           "Double-click:", IDC_STATIC, 233, 83, 60, 10
     COMBOBOX        IDC_DOUBLE_CLICK, 296, 81, 130, 60, CBS_DROPDOWNLIST | WS_VSCROLL | WS_TABSTOP
 
-    GROUPBOX        "Alerts", IDC_STATIC, 225, 104, 208, 50
+    GROUPBOX        "Alerts", IDC_STATIC, 225, 104, 208, 80
     LTEXT           "Low quota alert:", IDC_STATIC, 233, 119, 60, 10
     EDITTEXT        IDC_ALERT, 296, 117, 30, 13, ES_AUTOHSCROLL | ES_NUMBER
     LTEXT           "%", IDC_STATIC, 329, 119, 10, 10
     LTEXT           "Notify when any window drops below this; 0 turns it off", IDC_STATIC, 233, 136, 195, 10
+    AUTOCHECKBOX    "Notify when an account credential is invalid", IDC_NOTIFY_CREDENTIAL, 233, 150, 195, 12
+    AUTOCHECKBOX    "Notify when exhausted quota is restored", IDC_NOTIFY_RESTORE, 233, 165, 195, 12
 
-    LTEXT           "", IDC_STATUS, 7, 160, 426, 30
-    PUSHBUTTON      "Test connection", IDC_TEST, 7, 196, 70, 14
-    DEFPUSHBUTTON   "OK", IDOK, 323, 196, 52, 14
-    PUSHBUTTON      "Cancel", IDCANCEL, 381, 196, 52, 14
+    LTEXT           "", IDC_STATUS, 7, 190, 426, 30
+    PUSHBUTTON      "Test connection", IDC_TEST, 7, 226, 70, 14
+    DEFPUSHBUTTON   "OK", IDOK, 323, 226, 52, 14
+    PUSHBUTTON      "Cancel", IDCANCEL, 381, 226, 52, 14
 END
 
 LANGUAGE LANG_CHINESE, SUBLANG_CHINESE_SIMPLIFIED

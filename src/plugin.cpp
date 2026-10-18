@@ -242,20 +242,30 @@ void CpaPlugin::DataRequired()
         shown_ = std::move(fresh);
         if (shown_->auth_rejected) paused_ = true;
         for (QuotaItem& item : items_) item.Update(shown_.get(), config_);
-        if (shown_->ok) NotifyLowQuota(*shown_);
+        if (shown_->ok) NotifyAlerts(*shown_);
     }
 
     StartFetchIfDue(false);
 }
 
-void CpaPlugin::NotifyLowQuota(const Snapshot& snapshot)
+void CpaPlugin::NotifyAlerts(const Snapshot& snapshot)
 {
-    auto messages = alerts_.Check(snapshot.accounts, static_cast<int>(config_.alert_threshold),
-                                  static_cast<int64_t>(std::time(nullptr)));
-    if (messages.empty() || !app_) return;
-    std::wstring text = T(L"CPA 额度不足", L"CPA quota low");
-    for (const std::wstring& m : messages) text += L"\n" + m;
-    app_->ShowNotifyMessage(text.c_str());
+    const int64_t now = static_cast<int64_t>(std::time(nullptr));
+    // 各类提醒合并为一条通知，避免同一轮刷新连续弹出多条。
+    std::wstring text;
+    auto append = [&text](const wchar_t* title, const std::vector<std::wstring>& messages) {
+        if (messages.empty()) return;
+        if (!text.empty()) text += L"\n";
+        text += title;
+        for (const std::wstring& m : messages) text += L"\n" + m;
+    };
+    append(T(L"CPA 账号凭证失效，请在 CPA 中重新登录", L"CPA account credential invalid, sign in again in CPA"),
+           credential_alerts_.Check(snapshot.accounts, config_.notify_credential));
+    append(T(L"CPA 额度不足", L"CPA quota low"),
+           alerts_.Check(snapshot.accounts, static_cast<int>(config_.alert_threshold), now));
+    append(T(L"CPA 额度已恢复", L"CPA quota restored"),
+           restore_alerts_.Check(snapshot.accounts, config_.notify_restore, now));
+    if (!text.empty() && app_) app_->ShowNotifyMessage(text.c_str());
 }
 
 void CpaPlugin::StartFetchIfDue(bool force)
@@ -345,6 +355,7 @@ std::wstring CpaPlugin::BuildTooltip() const
     auto stale_note = [now](const AccountQuota& q) -> std::wstring {
         if (!q.stale) return {};
         std::wstring note = T(L" · 沿用 ", L" · data from ") + FormatDuration(now - q.data_at) + T(L" 前数据", L" ago");
+        if (q.credential_invalid) note += T(L" · 凭证失效", L" · credential invalid");
         if (!q.error.empty()) note += T(L"（", L" (") + q.error + T(L"）", L")");
         return note;
     };
@@ -365,7 +376,10 @@ std::wstring CpaPlugin::BuildTooltip() const
             tip += L"\n  " + Utf8ToWide(q.account.DisplayName());
             if (!q.plan.empty()) tip += L" (" + Utf8ToWide(q.plan) + L")";
             tip += L":";
-            if (!q.ok) {
+            if (!q.ok && q.credential_invalid) {
+                tip += T(L" 凭证失效，请在 CPA 中重新登录（", L" credential invalid, sign in again in CPA (") + q.error +
+                       T(L"）", L")");
+            } else if (!q.ok) {
                 tip += T(L" 错误 ", L" error: ") + q.error;
             } else if (p == Provider::Antigravity) {
                 if (q.cooled) tip += T(L" 冷却中", L" cooling down");

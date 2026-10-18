@@ -104,6 +104,14 @@ Config LoadConfig(const std::wstring& ini_path)
     c.color_by_quota = GetPrivateProfileIntW(kSection, L"ColorByQuota", 0, ini_path.c_str()) != 0;
     UINT alert = GetPrivateProfileIntW(kSection, L"AlertThreshold", 10, ini_path.c_str());
     c.alert_threshold = alert > 99 ? 99 : alert;
+    c.notify_credential = GetPrivateProfileIntW(kSection, L"NotifyCredential", 1, ini_path.c_str()) != 0;
+    c.notify_restore = GetPrivateProfileIntW(kSection, L"NotifyRestore", 0, ini_path.c_str()) != 0;
+
+    UINT proxy_mode = GetPrivateProfileIntW(kSection, L"ProxyMode", 0, ini_path.c_str());
+    std::wstring proxy;
+    if (NormalizeProxy(ReadString(ini_path, L"Proxy", L""), proxy)) c.proxy = proxy;
+    if (proxy_mode == 1) c.proxy_mode = ProxyMode::System;
+    else if (proxy_mode == 2 && !c.proxy.empty()) c.proxy_mode = ProxyMode::Custom;
     return c;
 }
 
@@ -132,7 +140,12 @@ bool SaveConfig(const std::wstring& ini_path, const Config& config, std::wstring
               WritePrivateProfileStringW(kSection, L"SkipTlsVerify", flag(config.skip_tls_verify), ini_path.c_str()) &&
               WritePrivateProfileStringW(kSection, L"SmartCooldown", flag(config.smart_cooldown), ini_path.c_str()) &&
               WritePrivateProfileStringW(kSection, L"DoubleClick",
-                                         std::to_wstring(static_cast<int>(config.double_click)).c_str(), ini_path.c_str());
+                                         std::to_wstring(static_cast<int>(config.double_click)).c_str(), ini_path.c_str()) &&
+              WritePrivateProfileStringW(kSection, L"NotifyCredential", flag(config.notify_credential), ini_path.c_str()) &&
+              WritePrivateProfileStringW(kSection, L"NotifyRestore", flag(config.notify_restore), ini_path.c_str()) &&
+              WritePrivateProfileStringW(kSection, L"ProxyMode",
+                                         std::to_wstring(static_cast<int>(config.proxy_mode)).c_str(), ini_path.c_str()) &&
+              WritePrivateProfileStringW(kSection, L"Proxy", config.proxy.c_str(), ini_path.c_str());
     if (!ok && error) *error = T(L"无法写入配置文件: ", L"Cannot write config file: ") + ini_path;
     return ok;
 }

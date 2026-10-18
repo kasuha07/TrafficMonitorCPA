@@ -5,6 +5,7 @@
 #include <string>
 
 #include "alerts.h"
+#include "http_client.h"
 #include "i18n.h"
 #include "json.h"
 #include "quota.h"
@@ -322,6 +323,117 @@ static void TestAlerts()
     CHECK(alerts.Check(accounts, 0, now).empty());
 }
 
+static void TestCredentialAlerts()
+{
+    // 凭证失效的判断
+    CHECK(IsCredentialFailure(200, "{}", 401));
+    CHECK(!IsCredentialFailure(200, "{}", 403));
+    CHECK(!IsCredentialFailure(200, "{}", 429));
+    CHECK(IsCredentialFailure(400, R"({"error":"auth token refresh failed"})", 0));
+    CHECK(IsCredentialFailure(400, R"({"error":"auth token not found"})", 0));
+    CHECK(!IsCredentialFailure(400, R"({"error":"invalid url"})", 0));
+    CHECK(!IsCredentialFailure(401, R"({"error":"auth token refresh failed"})", 0));  // 管理密钥错误
+
+    CredentialAlerts alerts;
+    AccountQuota bad = MakeQuota(Provider::Claude, "b", 0, 0);
+    bad.ok = false;
+    bad.credential_invalid = true;
+    std::vector<AccountQuota> accounts = {MakeQuota(Provider::Codex, "a", 10, 10), bad};
+
+    auto first = alerts.Check(accounts, true);
+    CHECK(first.size() == 1);
+    CHECK(first[0] == L"Claude b@x.com");
+    CHECK(alerts.Check(accounts, true).empty());  // 不重复提醒
+
+    // 其他原因失败、冷却中或沿用旧数据：保持状态
+    accounts[1].credential_invalid = false;
+    CHECK(alerts.Check(accounts, true).empty());
+    accounts[1].ok = true;
+    accounts[1].stale = true;
+    CHECK(alerts.Check(accounts, true).empty());
+    accounts[1].credential_invalid = true;
+    CHECK(alerts.Check(accounts, true).empty());
+
+    // 重新获取成功后重新生效
+    accounts[1] = MakeQuota(Provider::Claude, "b", 0, 0);
+    CHECK(alerts.Check(accounts, true).empty());
+    accounts[1].ok = false;
+    accounts[1].credential_invalid = true;
+    CHECK(alerts.Check(accounts, true).size() == 1);
+
+    // 账号从列表中消失后重新生效
+    CHECK(alerts.Check({accounts[0]}, true).empty());
+    CHECK(alerts.Check(accounts, true).size() == 1);
+
+    // 关闭时不提醒并清空状态
+    CHECK(alerts.Check(accounts, false).empty());
+    CHECK(alerts.Check(accounts, true).size() == 1);
+}
+
+static void TestRestoreAlerts()
+{
+    RestoreAlerts alerts;
+    const int64_t now = 1792324800;
+    std::vector<AccountQuota> accounts = {MakeQuota(Provider::Codex, "a", 100, 40)};
+
+    // 首次看到用尽只记录，不提醒
+    CHECK(alerts.Check(accounts, true, now).empty());
+
+    // 冷却中、沿用的数据不算恢复
+    accounts[0].five_hour.used_percent = 0;
+    accounts[0].cooled = true;
+    CHECK(alerts.Check(accounts, true, now).empty());
+    accounts[0].cooled = false;
+    accounts[0].stale = true;
+    CHECK(alerts.Check(accounts, true, now).empty());
+    accounts[0].stale = false;
+
+    // 实际获取到有余量的数据：提醒一次
+    accounts[0].five_hour.reset_at = now + 5 * 3600;
+    auto restored = alerts.Check(accounts, true, now);
+    CHECK(restored.size() == 1);
+    CHECK(restored[0] == L"Codex a@x.com 5h 剩余 100% (5h0m)");
+    CHECK(alerts.Check(accounts, true, now).empty());
+
+    // 从未用尽的窗口不提醒；剩余 0.4% 视为用尽
+    accounts[0].weekly.used_percent = 99.6;
+    CHECK(alerts.Check(accounts, true, now).empty());
+    accounts[0].weekly.used_percent = 50;
+    CHECK(alerts.Check(accounts, true, now).size() == 1);
+
+    // Antigravity 按分组
+    AccountQuota ag = MakeQuota(Provider::Antigravity, "g", 0, 0);
+    ag.groups = {{"Gemini", {true, 100, 0, false}, {true, 0, 0, false}}};
+    CHECK(alerts.Check({ag}, true, now).empty());
+    ag.groups[0].five_hour.used_percent = 20;
+    auto ag_restored = alerts.Check({ag}, true, now);
+    CHECK(ag_restored.size() == 1);
+    CHECK(ag_restored[0] == L"Antigravity g@x.com Gemini 5h 剩余 80%");
+
+    // 关闭时清空状态
+    accounts[0].five_hour.used_percent = 100;
+    CHECK(alerts.Check(accounts, true, now).empty());
+    CHECK(alerts.Check(accounts, false, now).empty());
+    accounts[0].five_hour.used_percent = 0;
+    CHECK(alerts.Check(accounts, true, now).empty());
+}
+
+static void TestProxy()
+{
+    std::wstring out;
+    CHECK(NormalizeProxy(L"127.0.0.1:7890", out) && out == L"http://127.0.0.1:7890");
+    CHECK(NormalizeProxy(L"  HTTP://proxy.lan:8080/ ", out) && out == L"http://proxy.lan:8080");
+    CHECK(NormalizeProxy(L"[::1]:3128", out) && out == L"http://[::1]:3128");
+    CHECK(!NormalizeProxy(L"", out));
+    CHECK(!NormalizeProxy(L"proxy.lan", out));
+    CHECK(!NormalizeProxy(L"proxy.lan:", out));
+    CHECK(!NormalizeProxy(L"proxy.lan:99999", out));
+    CHECK(!NormalizeProxy(L"socks5://127.0.0.1:1080", out));
+    CHECK(!NormalizeProxy(L"https://proxy.lan:443", out));
+    CHECK(!NormalizeProxy(L"http://user:pass@proxy.lan:8080", out));
+    CHECK(!NormalizeProxy(L"http://proxy.lan:8080/path", out));
+}
+
 static void TestCooldown()
 {
     const int64_t now = 1792324800;
@@ -431,6 +543,9 @@ int main()
     TestAggregate();
     TestLanguage();
     TestAlerts();
+    TestCredentialAlerts();
+    TestRestoreAlerts();
+    TestProxy();
     TestCooldown();
     TestCarryOver();
     TestAntigravity();

@@ -30,10 +30,12 @@ add_compile_options(
 )
 add_link_options("$<$<NOT:$<CONFIG:Debug>>:/LTCG;/OPT:REF;/OPT:ICF>")
 
-# Pure parsing logic, shared by the plugin and the unit tests.
+# Parsing logic and the HTTP client, shared by the plugin and the unit tests.
 add_library(cpa_core STATIC
     src/alerts.cpp
     src/alerts.h
+    src/http_client.cpp
+    src/http_client.h
     src/i18n.cpp
     src/i18n.h
     src/json.cpp
@@ -42,14 +44,13 @@ add_library(cpa_core STATIC
     src/quota.h
 )
 target_include_directories(cpa_core PUBLIC src)
+target_link_libraries(cpa_core PUBLIC winhttp)
 
 add_library(CPAQuota SHARED
     src/plugin.cpp
     src/plugin.h
     src/cpa_client.cpp
     src/cpa_client.h
-    src/http_client.cpp
-    src/http_client.h
     src/config.cpp
     src/config.h
     src/options_dialog.cpp
@@ -59,7 +60,7 @@ add_library(CPAQuota SHARED
 )
 target_include_directories(CPAQuota SYSTEM PRIVATE third_party/TrafficMonitor)
 target_include_directories(CPAQuota PRIVATE ${CMAKE_CURRENT_BINARY_DIR})
-target_link_libraries(CPAQuota PRIVATE cpa_core winhttp crypt32 shell32)
+target_link_libraries(CPAQuota PRIVATE cpa_core crypt32 shell32)
 
 configure_file(src/version.h.in version.h @ONLY)
 

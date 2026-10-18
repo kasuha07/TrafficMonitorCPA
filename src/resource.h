@@ -19,3 +19,7 @@
 #define IDC_SMART_COOLDOWN      1014
 #define IDC_DOUBLE_CLICK        1015
 #define IDC_COLOR_BY_QUOTA      1016
+#define IDC_PROXY_MODE          1017
+#define IDC_PROXY               1018
+#define IDC_NOTIFY_CREDENTIAL   1019
+#define IDC_NOTIFY_RESTORE      1020

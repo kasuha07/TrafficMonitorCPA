@@ -85,12 +85,15 @@ CredentialsResult FetchCredentials(HttpClient& http)
 using Headers = std::vector<std::pair<std::string, std::string>>;
 
 // 通过 api-call 让 CPA 用账号 token 请求上游。成功（上游 2xx）时返回 true 并写入 body。
+// 失败且原因是凭证失效时，若传入 credential_invalid 则将其置为 true。
 bool CallUpstream(HttpClient& http, const Account& a, const char* method, const char* url,
-                  const Headers& headers, std::string_view data, std::string& body, std::wstring& error)
+                  const Headers& headers, std::string_view data, std::string& body, std::wstring& error,
+                  bool* credential_invalid = nullptr)
 {
     HttpResponse r = http.PostJson(kApiCallPath, BuildApiCallBody(a.auth_index, method, url, headers, data));
     if (!r.ok || r.status != 200) {
         error = DescribeHttpFailure(r);
+        if (credential_invalid && r.ok && IsCredentialFailure(r.status, r.body, 0)) *credential_invalid = true;
         return false;
     }
     std::string err;
@@ -103,6 +106,7 @@ bool CallUpstream(HttpClient& http, const Account& a, const char* method, const 
         error = T(L"上游 HTTP ", L"Upstream HTTP ") + std::to_wstring(call->status_code);
         std::string detail = ExtractErrorMessage(call->body);
         if (!detail.empty()) error += L": " + Utf8ToWide(detail);
+        if (credential_invalid && IsCredentialFailure(r.status, r.body, call->status_code)) *credential_invalid = true;
         return false;
     }
     body = std::move(call->body);
@@ -232,10 +236,12 @@ void FetchAntigravityQuota(HttpClient& http, AccountQuota& q)
     std::wstring last_error;
     for (const char* url : kAntigravityQuotaUrls) {
         std::string body;
-        if (!CallUpstream(http, q.account, "POST", url, headers, data, body, last_error)) continue;
+        if (!CallUpstream(http, q.account, "POST", url, headers, data, body, last_error, &q.credential_invalid))
+            continue;
         std::string err;
         if (ParseAntigravityQuota(body, q, &err)) {
             q.ok = true;
+            q.credential_invalid = false;
             q.plan = FetchAntigravityPlan(http, q.account, headers);
             return;
         }
@@ -314,7 +320,7 @@ void FetchAccountQuota(HttpClient& http, AccountQuota& q, int64_t now)
     }
 
     std::string body;
-    if (!CallUpstream(http, a, "GET", url, headers, {}, body, q.error)) return;
+    if (!CallUpstream(http, a, "GET", url, headers, {}, body, q.error, &q.credential_invalid)) return;
 
     std::string err;
     bool parsed = a.provider == Provider::Codex ? ParseCodexUsage(body, now, q, &err)
@@ -363,7 +369,8 @@ Snapshot FetchSnapshot(const Config& config, const Snapshot* previous, bool forc
         return snap;
     }
 
-    HttpClient http(config.base_url, config.management_key, 20000, config.skip_tls_verify);
+    HttpClient http(config.base_url, config.management_key, 20000, config.skip_tls_verify, config.proxy_mode,
+                    config.proxy);
     CredentialsResult creds = FetchCredentials(http);
     if (!creds.ok) {
         // 网络抖动等临时故障：沿用上次数据，连续失败达到上限后再显示错误。密钥错误不沿用。
@@ -430,7 +437,8 @@ Snapshot FetchSnapshot(const Config& config, const Snapshot* previous, bool forc
 std::wstring TestConnection(const Config& config)
 {
     if (config.management_key.empty()) return T(L"请填写管理密钥", L"Please enter the management key");
-    HttpClient http(config.base_url, config.management_key, 10000, config.skip_tls_verify);
+    HttpClient http(config.base_url, config.management_key, 10000, config.skip_tls_verify, config.proxy_mode,
+                    config.proxy);
     CredentialsResult creds = FetchCredentials(http);
     if (!creds.ok) return creds.error;
 

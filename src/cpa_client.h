@@ -4,6 +4,7 @@
 #include <string>
 #include <vector>
 
+#include "http_client.h"
 #include "quota.h"
 
 namespace cpa {
@@ -39,8 +40,17 @@ struct Config
     // 跳过 CPA 的 HTTPS 证书校验（自签名证书等）。只影响插件到 CPA 的连接。
     bool skip_tls_verify = false;
 
+    // 连接 CPA 使用的代理（默认不使用）。proxy 为 Custom 时的地址，已经过 NormalizeProxy 校验。
+    // 只影响插件到 CPA 的连接；CPA 请求上游时使用它自己的代理设置。
+    ProxyMode proxy_mode = ProxyMode::None;
+    std::wstring proxy;
+
     // 低额度提醒阈值（%）；0 表示关闭。
     unsigned alert_threshold = 10;
+    // 账号凭证失效（上游 401 或 CPA 无法刷新 token）时通知。
+    bool notify_credential = true;
+    // 用尽的额度窗口恢复时通知。
+    bool notify_restore = false;
 
     bool IsEnabled(Provider p) const
     {

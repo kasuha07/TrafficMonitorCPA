@@ -68,7 +68,29 @@ bool ReadInputs(HWND dlg, Config& out)
     out.double_click = SendDlgItemMessageW(dlg, IDC_DOUBLE_CLICK, CB_GETCURSEL, 0, 0) == 1
                            ? DoubleClickAction::Refresh
                            : DoubleClickAction::OpenManagementPage;
+    out.notify_credential = IsDlgButtonChecked(dlg, IDC_NOTIFY_CREDENTIAL) == BST_CHECKED;
+    out.notify_restore = IsDlgButtonChecked(dlg, IDC_NOTIFY_RESTORE) == BST_CHECKED;
+
+    LRESULT proxy_mode = SendDlgItemMessageW(dlg, IDC_PROXY_MODE, CB_GETCURSEL, 0, 0);
+    out.proxy_mode = proxy_mode == 1 ? ProxyMode::System : (proxy_mode == 2 ? ProxyMode::Custom : ProxyMode::None);
+    std::wstring proxy = GetText(dlg, IDC_PROXY);
+    std::wstring normalized;
+    if (NormalizeProxy(proxy, normalized)) {
+        out.proxy = normalized;
+    } else if (out.proxy_mode == ProxyMode::Custom || !proxy.empty()) {
+        SetDlgItemTextW(dlg, IDC_STATUS, T(L"代理地址需为 host:port 或 http://host:port（不支持 SOCKS）",
+                                           L"Proxy must be host:port or http://host:port (SOCKS is not supported)"));
+        return false;
+    } else {
+        out.proxy.clear();
+    }
     return true;
+}
+
+void UpdateProxyEnabled(HWND dlg)
+{
+    bool custom = SendDlgItemMessageW(dlg, IDC_PROXY_MODE, CB_GETCURSEL, 0, 0) == 2;
+    EnableWindow(GetDlgItem(dlg, IDC_PROXY), custom);
 }
 
 INT_PTR CALLBACK DialogProc(HWND dlg, UINT msg, WPARAM wp, LPARAM lp)
@@ -99,6 +121,15 @@ INT_PTR CALLBACK DialogProc(HWND dlg, UINT msg, WPARAM wp, LPARAM lp)
         for (const wchar_t* text : {T(L"打开 CPA 管理页面", L"Open CPA management page"), T(L"立即刷新额度", L"Refresh quota now")})
             SendDlgItemMessageW(dlg, IDC_DOUBLE_CLICK, CB_ADDSTRING, 0, reinterpret_cast<LPARAM>(text));
         SendDlgItemMessageW(dlg, IDC_DOUBLE_CLICK, CB_SETCURSEL, static_cast<WPARAM>(config->double_click), 0);
+        CheckDlgButton(dlg, IDC_NOTIFY_CREDENTIAL, config->notify_credential ? BST_CHECKED : BST_UNCHECKED);
+        CheckDlgButton(dlg, IDC_NOTIFY_RESTORE, config->notify_restore ? BST_CHECKED : BST_UNCHECKED);
+        // 顺序与 ProxyMode 的取值一致。
+        for (const wchar_t* text : {T(L"不使用代理", L"No proxy"), T(L"使用系统代理", L"Use system proxy"),
+                                    T(L"指定 HTTP 代理", L"Custom HTTP proxy")})
+            SendDlgItemMessageW(dlg, IDC_PROXY_MODE, CB_ADDSTRING, 0, reinterpret_cast<LPARAM>(text));
+        SendDlgItemMessageW(dlg, IDC_PROXY_MODE, CB_SETCURSEL, static_cast<WPARAM>(config->proxy_mode), 0);
+        SetDlgItemTextW(dlg, IDC_PROXY, config->proxy.c_str());
+        UpdateProxyEnabled(dlg);
         SetDlgItemTextW(dlg, IDC_STATUS,
                         T(L"管理密钥即 CPA 配置中的 remote-management.secret-key。\r\n"
                           L"注意：CPA 对连续 5 次密钥错误会封禁 IP 30 分钟。",
@@ -108,6 +139,9 @@ INT_PTR CALLBACK DialogProc(HWND dlg, UINT msg, WPARAM wp, LPARAM lp)
     }
     case WM_COMMAND:
         switch (LOWORD(wp)) {
+        case IDC_PROXY_MODE:
+            if (HIWORD(wp) == CBN_SELCHANGE) UpdateProxyEnabled(dlg);
+            return TRUE;
         case IDC_TEST: {
             Config probe;
             if (!ReadInputs(dlg, probe)) return TRUE;

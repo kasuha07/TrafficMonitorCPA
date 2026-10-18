@@ -186,6 +186,7 @@ bool CarryOverOnFailure(const AccountQuota* previous, AccountQuota& failed)
     AccountQuota carried = *previous;
     carried.account = std::move(failed.account);
     carried.error = std::move(failed.error);
+    carried.credential_invalid = failed.credential_invalid;
     carried.failures = failures;
     carried.stale = true;
     carried.cooled = false;
@@ -332,6 +333,15 @@ std::string ExtractErrorMessage(std::string_view body)
     std::string text(body.substr(0, 200));
     text.erase(std::remove_if(text.begin(), text.end(), [](char c) { return c == '\r' || c == '\n'; }), text.end());
     return text;
+}
+
+bool IsCredentialFailure(unsigned cpa_status, std::string_view cpa_body, unsigned upstream_status)
+{
+    if (cpa_status == 200) return upstream_status == 401;
+    if (cpa_status != 400) return false;
+    // 与 CPA management/api_tools.go 中 $TOKEN$ 解析失败时的错误文本一致。
+    std::string message = ExtractErrorMessage(cpa_body);
+    return message == "auth token refresh failed" || message == "auth token not found";
 }
 
 bool ParseCodexUsage(std::string_view body, int64_t now, AccountQuota& out, std::string* error)
