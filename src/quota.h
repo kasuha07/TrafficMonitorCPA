@@ -47,7 +47,7 @@ struct QuotaGroup
     QuotaWindow weekly;
 };
 
-// Codex 的额度重置卡（rate-limit reset credits）。
+// 额度重置卡：Codex 的 rate-limit reset credits / Claude 的 reset grants（cedar_ember）。
 struct ResetCredits
 {
     int available = -1;          // 可用数量；-1 表示未知
@@ -64,7 +64,7 @@ struct AccountQuota
     QuotaWindow five_hour;
     QuotaWindow weekly;
     std::vector<QuotaGroup> groups;   // 仅 Antigravity
-    ResetCredits reset_credits;       // 仅 Codex
+    ResetCredits reset_credits;       // Codex / Claude
 };
 
 Provider ParseProvider(std::string_view raw);
@@ -97,6 +97,10 @@ bool ParseCodexUsage(std::string_view body, int64_t now, AccountQuota& out, std:
 
 // 解析 Codex wham/rate-limit-reset-credits 响应（与 Management Center 的 resetCredits.ts 一致）。
 bool ParseCodexResetCredits(std::string_view body, ResetCredits& out, std::string* error);
+
+// 解析 Claude oauth/usage?cedar_ember=1 响应中的 cedar_ember 块：数量为各 grant 剩余次数之和。
+// 与 Management Center 的 claudeResetGrants.ts 一致。
+bool ParseClaudeResetGrants(std::string_view body, ResetCredits& out, std::string* error);
 
 // 解析 Claude oauth/usage 响应。
 bool ParseClaudeUsage(std::string_view body, AccountQuota& out, std::string* error);

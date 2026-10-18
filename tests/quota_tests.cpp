@@ -166,6 +166,26 @@ static void TestCodexResetCredits()
     CHECK(!ParseCodexResetCredits(R"({"detail":"x"})", bad, &err));
 }
 
+static void TestClaudeResetGrants()
+{
+    std::string err;
+    ResetCredits rc;
+    CHECK(ParseClaudeResetGrants(R"({"five_hour":{"utilization":1},"cedar_ember":{"eligible":true,"at_limit":false,
+        "grants":[
+          {"id":"g1","resets_total":3,"resets_left":2,"ends_at":"2026-10-25T00:00:00Z","clears":["five_hour"]},
+          {"id":"g2","resets_total":1,"resets_left":1,"ends_at":"2026-10-20T00:00:00Z"},
+          {"id":"g3","resets_total":1,"resets_left":0,"ends_at":"2026-10-19T00:00:00Z"}]}})", rc, &err));
+    CHECK(rc.available == 3);
+    CHECK(rc.soonest_expiry == 1792454400);  // g3 已用完，不计入
+
+    ResetCredits none;
+    CHECK(ParseClaudeResetGrants(R"({"cedar_ember":{"eligible":false,"ineligible_reason":"no_grant"}})", none, &err));
+    CHECK(none.available == 0);
+
+    ResetCredits bad;
+    CHECK(!ParseClaudeResetGrants(R"({"five_hour":{"utilization":1}})", bad, &err));
+}
+
 static void TestClaudeUsage()
 {
     std::string err;
@@ -236,6 +256,7 @@ int main()
     TestApiCall();
     TestCodexUsage();
     TestCodexResetCredits();
+    TestClaudeResetGrants();
     TestClaudeUsage();
     if (g_failures) {
         std::printf("%d check(s) failed\n", g_failures);

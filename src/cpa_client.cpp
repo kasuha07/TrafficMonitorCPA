@@ -19,6 +19,7 @@ constexpr char kCodexUserAgent[] =
     "codex-tui/0.149.1 (Mac OS 26.5.2; arm64) iTerm.app/3.6.11 (codex-tui; 0.149.1)";
 constexpr char kClaudeUsageUrl[] = "https://api.anthropic.com/api/oauth/usage";
 constexpr char kClaudeUserAgent[] = "claude-cli/2.1.280 (external, cli)";
+constexpr char kClaudeResetGrantsUrl[] = "https://api.anthropic.com/api/oauth/usage?cedar_ember=1&skip_spend=1";
 constexpr const char* kAntigravityQuotaUrls[] = {
     "https://daily-cloudcode-pa.googleapis.com/v1internal:retrieveUserQuotaSummary",
     "https://daily-cloudcode-pa.sandbox.googleapis.com/v1internal:retrieveUserQuotaSummary",
@@ -185,6 +186,38 @@ void FetchCodexResetCredits(HttpClient& http, AccountQuota& q, Headers headers)
     q.reset_credits.soonest_expiry = detail.soonest_expiry;
 }
 
+// Claude 重置卡复用用量接口（带 cedar_ember 参数），该接口容易被限流，
+// 且 grant 很少变化，所以每个账号最多 10 分钟请求一次，期间使用缓存。
+void FetchClaudeResetGrants(HttpClient& http, AccountQuota& q, const Headers& headers, int64_t now)
+{
+    constexpr int64_t kCacheSeconds = 600;
+    struct Entry
+    {
+        int64_t fetched_at = 0;
+        ResetCredits credits;
+    };
+    static std::mutex cache_mutex;
+    static std::map<std::string, Entry> cache;
+    const std::string key = q.account.auth_index + "|" + q.account.name;
+    {
+        std::lock_guard lock(cache_mutex);
+        if (auto it = cache.find(key); it != cache.end() && now - it->second.fetched_at < kCacheSeconds) {
+            q.reset_credits = it->second.credits;
+            return;
+        }
+    }
+
+    std::string body;
+    std::wstring error;
+    if (!CallUpstream(http, q.account, "GET", kClaudeResetGrantsUrl, headers, {}, body, error)) return;
+    ResetCredits credits;
+    std::string err;
+    if (!ParseClaudeResetGrants(body, credits, &err)) return;
+    q.reset_credits = credits;
+    std::lock_guard lock(cache_mutex);
+    cache[key] = {now, credits};
+}
+
 void FetchAccountQuota(HttpClient& http, AccountQuota& q, int64_t now)
 {
     const Account& a = q.account;
@@ -231,6 +264,7 @@ void FetchAccountQuota(HttpClient& http, AccountQuota& q, int64_t now)
     q.ok = true;
 
     if (a.provider == Provider::Codex) FetchCodexResetCredits(http, q, headers);
+    else FetchClaudeResetGrants(http, q, headers, now);
 }
 
 } // namespace

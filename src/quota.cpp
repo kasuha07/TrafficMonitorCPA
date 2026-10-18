@@ -329,6 +329,33 @@ bool ParseCodexResetCredits(std::string_view body, ResetCredits& out, std::strin
     return true;
 }
 
+bool ParseClaudeResetGrants(std::string_view body, ResetCredits& out, std::string* error)
+{
+    auto root = ParseObject(body, error);
+    if (!root) return false;
+    const json::Value* block = root->Find("cedar_ember");
+    if (!block || !block->IsObject() || !block->Find("eligible") || !block->Find("eligible")->IsBool()) {
+        if (error) *error = "usage response has no cedar_ember block";
+        return false;
+    }
+
+    ResetCredits result;
+    result.available = 0;
+    if (const json::Value* grants = block->Find("grants"); grants && grants->IsArray()) {
+        for (const json::Value& g : grants->Items()) {
+            if (!g.IsObject()) continue;
+            auto left = NumberOf(g.Find("resets_left"));
+            if (!left || *left <= 0) continue;
+            result.available += static_cast<int>(*left);
+            if (auto ends = ParseIso8601(StringOf(g.Find("ends_at")))) {
+                if (result.soonest_expiry == 0 || *ends < result.soonest_expiry) result.soonest_expiry = *ends;
+            }
+        }
+    }
+    out = result;
+    return true;
+}
+
 bool ParseClaudeUsage(std::string_view body, AccountQuota& out, std::string* error)
 {
     auto root = ParseObject(body, error);
