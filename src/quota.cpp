@@ -176,6 +176,23 @@ void ProjectResets(AccountQuota& q, int64_t now)
     }
 }
 
+bool CarryOverOnFailure(const AccountQuota* previous, AccountQuota& failed)
+{
+    const int failures = (previous ? previous->failures : 0) + 1;
+    if (!previous || !previous->ok || failures >= kMaxCarriedFailures) {
+        failed.failures = failures;
+        return false;
+    }
+    AccountQuota carried = *previous;
+    carried.account = std::move(failed.account);
+    carried.error = std::move(failed.error);
+    carried.failures = failures;
+    carried.stale = true;
+    carried.cooled = false;
+    failed = std::move(carried);
+    return true;
+}
+
 std::string Account::DisplayName() const
 {
     if (!email.empty()) return email;

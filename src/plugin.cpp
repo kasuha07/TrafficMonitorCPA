@@ -266,7 +266,17 @@ std::wstring CpaPlugin::BuildTooltip() const
     }
 
     int64_t now = static_cast<int64_t>(std::time(nullptr));
+    if (s.failures > 0) {
+        tip += L"\n本次刷新失败（连续 " + std::to_wstring(s.failures) + L" 次），显示 " +
+               FormatDuration(now - s.fetched_at) + L" 前的数据：" + s.warning;
+    }
     const bool used = config_.show_used;
+    auto stale_note = [now](const AccountQuota& q) -> std::wstring {
+        if (!q.stale) return {};
+        std::wstring note = L" · 沿用 " + FormatDuration(now - q.data_at) + L" 前数据";
+        if (!q.error.empty()) note += L"（" + q.error + L"）";
+        return note;
+    };
     auto windows = [now, used](const QuotaWindow& five_hour, const QuotaWindow& weekly) {
         std::wstring five = FormatWindow(five_hour, L"5h", now, used);
         std::wstring week = FormatWindow(weekly, L"7d", now, used);
@@ -288,6 +298,7 @@ std::wstring CpaPlugin::BuildTooltip() const
                 tip += L" 错误 " + q.error;
             } else if (p == Provider::Antigravity) {
                 if (q.cooled) tip += L" 冷却中";
+                tip += stale_note(q);
                 for (const QuotaGroup& g : q.groups)
                     tip += L"\n    " + Utf8ToWide(g.name) + L": " + windows(g.five_hour, g.weekly);
             } else {
@@ -298,6 +309,7 @@ std::wstring CpaPlugin::BuildTooltip() const
                     if (rc.soonest_expiry > now) tip += L" (" + FormatDuration(rc.soonest_expiry - now) + L")";
                 }
                 if (q.cooled) tip += L" · 冷却中";
+                tip += stale_note(q);
             }
         }
     }

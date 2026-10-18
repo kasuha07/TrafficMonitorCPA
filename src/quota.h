@@ -66,7 +66,17 @@ struct AccountQuota
     std::vector<QuotaGroup> groups;   // 仅 Antigravity
     ResetCredits reset_credits;       // Codex / Claude
     bool cooled = false;              // 本次因冷却未请求，沿用上次数据
+    bool stale = false;               // 本次请求失败，沿用上次成功的数据（error 为失败原因）
+    int failures = 0;                 // 连续失败次数
+    int64_t data_at = 0;              // 数据获取时间（Unix 秒）
 };
+
+// 连续失败达到该次数时不再沿用旧数据，直接显示错误。
+constexpr int kMaxCarriedFailures = 3;
+
+// 请求失败时：若上次有成功数据且连续失败次数未达上限，则沿用上次数据（标记为 stale）并返回 true；
+// 否则只累计失败次数，返回 false。failed 为本次失败的结果（含最新账号信息和 error）。
+bool CarryOverOnFailure(const AccountQuota* previous, AccountQuota& failed);
 
 // 智能冷却：账号额度用尽时，到重置前都不必再请求。
 // 每个「窗口组」（Codex/Claude 为 5h+7d 一组，Antigravity 为每个模型分组）若有用尽且已知重置时间的窗口，

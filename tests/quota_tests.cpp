@@ -364,6 +364,41 @@ static void TestCooldown()
     CHECK_NEAR(p.weekly.RemainingPercent(), 0.0);
 }
 
+static void TestCarryOver()
+{
+    AccountQuota good = MakeQuota(Provider::Codex, "a", 30, 40);
+    good.data_at = 100;
+
+    // 第 1 次失败：沿用旧数据
+    AccountQuota f1;
+    f1.account = good.account;
+    f1.account.email = "new@x.com";
+    f1.error = L"上游 HTTP 503";
+    CHECK(CarryOverOnFailure(&good, f1));
+    CHECK(f1.ok && f1.stale && f1.failures == 1 && f1.data_at == 100);
+    CHECK(f1.account.email == "new@x.com");
+    CHECK(f1.error == L"上游 HTTP 503");
+    CHECK_NEAR(f1.five_hour.RemainingPercent(), 70.0);
+
+    // 第 2 次失败：仍沿用
+    AccountQuota f2;
+    f2.account = good.account;
+    CHECK(CarryOverOnFailure(&f1, f2));
+    CHECK(f2.failures == 2);
+
+    // 第 3 次失败：达到上限，显示错误
+    AccountQuota f3;
+    f3.account = good.account;
+    f3.error = L"x";
+    CHECK(!CarryOverOnFailure(&f2, f3));
+    CHECK(!f3.ok && f3.failures == 3 && f3.error == L"x");
+
+    // 没有旧数据
+    AccountQuota f4;
+    CHECK(!CarryOverOnFailure(nullptr, f4));
+    CHECK(f4.failures == 1);
+}
+
 static void TestAggregate()
 {
     const std::vector<double> v = {80, -1, 20, 0.2, 50};
@@ -386,6 +421,7 @@ int main()
     TestAggregate();
     TestAlerts();
     TestCooldown();
+    TestCarryOver();
     TestAntigravity();
     TestJson();
     TestIso8601();

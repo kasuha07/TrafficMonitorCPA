@@ -361,6 +361,15 @@ Snapshot FetchSnapshot(const Config& config, const Snapshot* previous, bool forc
     HttpClient http(config.base_url, config.management_key, 20000, config.skip_tls_verify);
     CredentialsResult creds = FetchCredentials(http);
     if (!creds.ok) {
+        // 网络抖动等临时故障：沿用上次数据，连续失败达到上限后再显示错误。密钥错误不沿用。
+        const int failures = (previous ? previous->failures : 0) + 1;
+        if (!creds.auth_rejected && previous && previous->ok && failures < kMaxCarriedFailures) {
+            Snapshot carried = *previous;
+            carried.failures = failures;
+            carried.warning = creds.error;
+            for (AccountQuota& q : carried.accounts) q.cooled = false;
+            return carried;
+        }
         snap.auth_rejected = creds.auth_rejected;
         snap.error = creds.error;
         return snap;
@@ -377,6 +386,7 @@ Snapshot FetchSnapshot(const Config& config, const Snapshot* previous, bool forc
                 q.account = std::move(a);  // 账号元数据（邮箱、备注等）用最新的
                 ProjectResets(q, now);
                 q.cooled = true;
+                q.stale = false;
                 snap.accounts.push_back(std::move(q));
                 continue;
             }
@@ -385,6 +395,8 @@ Snapshot FetchSnapshot(const Config& config, const Snapshot* previous, bool forc
         AccountQuota q;
         q.account = std::move(a);
         FetchAccountQuota(http, q, now);
+        if (q.ok) q.data_at = now;
+        else CarryOverOnFailure(FindPrevious(previous, q.account), q);
         snap.accounts.push_back(std::move(q));
     }
     snap.ok = true;

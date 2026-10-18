@@ -58,8 +58,12 @@ struct Snapshot
     // 因此出现该错误后应暂停自动刷新，直到用户修改设置。
     bool auth_rejected = false;
     std::wstring error;
-    int64_t fetched_at = 0;
+    int64_t fetched_at = 0;   // 数据获取时间；沿用旧数据时为旧数据的时间
     std::vector<AccountQuota> accounts;
+
+    // 获取账号列表失败但沿用了上次数据时：连续失败次数与失败原因。
+    int failures = 0;
+    std::wstring warning;
 };
 
 // 依次请求账号列表和每个账号的额度。同步阻塞，应在后台线程调用。
