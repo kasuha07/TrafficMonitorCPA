@@ -496,6 +496,28 @@ bool ParseAntigravityQuota(std::string_view body, AccountQuota& out, std::string
     return true;
 }
 
+std::string ParseAntigravityPlan(std::string_view body)
+{
+    std::string err;
+    auto root = ParseObject(body, &err);
+    if (!root) return {};
+    auto tier = [&](std::initializer_list<std::string_view> keys) -> std::pair<std::string, std::string> {
+        const json::Value* t = root->FindAny(keys);
+        if (!t || !t->IsObject()) return {};
+        return {StringOf(t->Find("id")), StringOf(t->Find("name"))};
+    };
+    auto paid = tier({"paidTier", "paid_tier"});
+    auto effective = paid.first.empty() ? tier({"currentTier", "current_tier"}) : paid;
+
+    // 与 Management Center 的 antigravitySubscription.ts 一致。
+    const std::string& id = effective.first;
+    if (id == "free-tier") return "Free";
+    if (id == "g1-pro-tier") return "Pro";
+    if (id == "g1-ultra-tier") return "Ultra";
+    if (id == "g1-ultra-lite-tier") return "Ultra Lite";
+    return !effective.second.empty() ? effective.second : id;
+}
+
 std::optional<int64_t> ParseIso8601(std::string_view s)
 {
     int y = 0, mo = 0, d = 0, h = 0, mi = 0, sec = 0;

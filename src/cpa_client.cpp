@@ -25,6 +25,7 @@ constexpr const char* kAntigravityQuotaUrls[] = {
     "https://daily-cloudcode-pa.sandbox.googleapis.com/v1internal:retrieveUserQuotaSummary",
     "https://cloudcode-pa.googleapis.com/v1internal:retrieveUserQuotaSummary",
 };
+constexpr char kAntigravityCodeAssistUrl[] = "https://daily-cloudcode-pa.googleapis.com/v1internal:loadCodeAssist";
 constexpr char kAntigravityUserAgent[] = "antigravity/hub/2.23.0 darwin/arm64";
 
 constexpr wchar_t kCredentialsPath[] = L"/v8/management/credentials";
@@ -140,6 +141,38 @@ std::string ResolveProjectId(HttpClient& http, const Account& a)
     return id;
 }
 
+// 套餐几乎不变，每个账号最多 1 小时查询一次；失败时不显示套餐，不影响额度。
+std::string FetchAntigravityPlan(HttpClient& http, const Account& a, const Headers& headers)
+{
+    constexpr int64_t kCacheSeconds = 3600;
+    struct Entry
+    {
+        int64_t fetched_at = 0;
+        std::string plan;
+    };
+    static std::mutex cache_mutex;
+    static std::map<std::string, Entry> cache;
+    const std::string key = a.auth_index + "|" + a.name;
+    const int64_t now = static_cast<int64_t>(std::time(nullptr));
+    {
+        std::lock_guard lock(cache_mutex);
+        if (auto it = cache.find(key); it != cache.end() && now - it->second.fetched_at < kCacheSeconds)
+            return it->second.plan;
+    }
+
+    std::string body;
+    std::wstring error;
+    if (!CallUpstream(http, a, "POST", kAntigravityCodeAssistUrl, headers,
+                      R"({"metadata":{"ideType":"ANTIGRAVITY"}})", body, error))
+        return {};
+    std::string plan = ParseAntigravityPlan(body);
+    if (!plan.empty()) {
+        std::lock_guard lock(cache_mutex);
+        cache[key] = {now, plan};
+    }
+    return plan;
+}
+
 void FetchAntigravityQuota(HttpClient& http, AccountQuota& q)
 {
     std::string project = ResolveProjectId(http, q.account);
@@ -162,6 +195,7 @@ void FetchAntigravityQuota(HttpClient& http, AccountQuota& q)
         std::string err;
         if (ParseAntigravityQuota(body, q, &err)) {
             q.ok = true;
+            q.plan = FetchAntigravityPlan(http, q.account, headers);
             return;
         }
         last_error = L"解析额度失败: " + Utf8ToWide(err);

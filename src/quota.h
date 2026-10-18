@@ -108,6 +108,10 @@ bool ParseClaudeUsage(std::string_view body, AccountQuota& out, std::string* err
 // 解析 Antigravity retrieveUserQuotaSummary 响应。
 bool ParseAntigravityQuota(std::string_view body, AccountQuota& out, std::string* error);
 
+// 解析 Antigravity loadCodeAssist 响应中的套餐（paidTier 优先于 currentTier），
+// 返回 Free / Pro / Ultra / Ultra Lite，未知 tier 返回其名称或 ID；无法识别时返回空串。
+std::string ParseAntigravityPlan(std::string_view body);
+
 // ISO-8601（如 2026-10-18T12:00:00.123456+00:00 / Z）→ Unix 秒。
 std::optional<int64_t> ParseIso8601(std::string_view s);
 

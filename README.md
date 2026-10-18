@@ -16,7 +16,7 @@
   - Codex 来自 `wham/rate-limit-reset-credits`，该接口失败时退回用量响应中的数量。
   - Claude 来自 `oauth/usage?cedar_ember=1` 的 reset grants，数量为各 grant 剩余次数之和；为避免触发限流，每个账号最多 10 分钟查询一次。
 - 插件命令「立即刷新额度」可手动刷新。Codex 团队账号的次级窗口是月度额度，提示中显示为「30d」，任务栏上仍计入 `X7d`。
-- Antigravity 按模型分组计算额度（如 Gemini、Claude/GPT），鼠标提示中逐组列出；任务栏只汇总 Gemini 分组（没有该分组时取第一个分组）。
+- Antigravity 按模型分组计算额度（如 Gemini、Claude/GPT），鼠标提示中逐组列出；任务栏只汇总 Gemini 分组（没有该分组时取第一个分组）。账号后显示套餐（Free / Pro / Ultra / Ultra Lite，来自 `loadCodeAssist`，每个账号最多 1 小时查询一次）。
 
 ## 工作原理
 

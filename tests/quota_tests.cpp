@@ -242,6 +242,12 @@ static void TestAntigravity()
     CHECK_NEAR(q.five_hour.RemainingPercent(), 80.0);
     CHECK_NEAR(q.weekly.RemainingPercent(), 25.0);
 
+    CHECK(ParseAntigravityPlan(R"({"currentTier":{"id":"free-tier","name":"Free"},"paidTier":{"id":"g1-ultra-tier"}})") == "Ultra");
+    CHECK(ParseAntigravityPlan(R"({"currentTier":{"id":"g1-pro-tier"}})") == "Pro");
+    CHECK(ParseAntigravityPlan(R"({"current_tier":{"id":"g1-ultra-lite-tier"}})") == "Ultra Lite");
+    CHECK(ParseAntigravityPlan(R"({"currentTier":{"id":"new-tier","name":"Mystery"}})") == "Mystery");
+    CHECK(ParseAntigravityPlan(R"({"cloudaicompanionProject":"p"})").empty());
+
     AccountQuota none;
     CHECK(!ParseAntigravityQuota(R"({"groups":[{"displayName":"X","buckets":[{"window":"daily","remainingFraction":1}]}]})", none, &err));
 }
