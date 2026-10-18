@@ -61,6 +61,8 @@ public:
 
     // 在默认浏览器中打开 CPA 管理页面。
     void OpenManagementPage();
+    // 双击显示项：按设置打开管理页面或立即刷新。
+    void OnItemDoubleClick();
 
 private:
     CpaPlugin();

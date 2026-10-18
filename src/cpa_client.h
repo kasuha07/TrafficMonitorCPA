@@ -8,6 +8,9 @@
 
 namespace cpa {
 
+// 双击任务栏显示项的动作。数值与 ini 中保存的值一致。
+enum class DoubleClickAction { OpenManagementPage = 0, Refresh = 1 };
+
 struct Config
 {
     std::wstring base_url = L"http://127.0.0.1:8317";
@@ -25,6 +28,8 @@ struct Config
     bool show_used = false;
     // 任务栏数值后附带重置倒计时，如 "82% 4h"。
     bool show_countdown = false;
+
+    DoubleClickAction double_click = DoubleClickAction::OpenManagementPage;
 
     // 智能冷却：额度用尽的账号在重置前不再请求，沿用上次数据。
     bool smart_cooldown = true;

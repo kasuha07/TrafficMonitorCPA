@@ -63,6 +63,9 @@ bool ReadInputs(HWND dlg, Config& out)
     out.show_countdown = IsDlgButtonChecked(dlg, IDC_SHOW_COUNTDOWN) == BST_CHECKED;
     out.skip_tls_verify = IsDlgButtonChecked(dlg, IDC_SKIP_TLS_VERIFY) == BST_CHECKED;
     out.smart_cooldown = IsDlgButtonChecked(dlg, IDC_SMART_COOLDOWN) == BST_CHECKED;
+    out.double_click = SendDlgItemMessageW(dlg, IDC_DOUBLE_CLICK, CB_GETCURSEL, 0, 0) == 1
+                           ? DoubleClickAction::Refresh
+                           : DoubleClickAction::OpenManagementPage;
     return true;
 }
 
@@ -87,6 +90,10 @@ INT_PTR CALLBACK DialogProc(HWND dlg, UINT msg, WPARAM wp, LPARAM lp)
         CheckDlgButton(dlg, IDC_SHOW_COUNTDOWN, config->show_countdown ? BST_CHECKED : BST_UNCHECKED);
         CheckDlgButton(dlg, IDC_SKIP_TLS_VERIFY, config->skip_tls_verify ? BST_CHECKED : BST_UNCHECKED);
         CheckDlgButton(dlg, IDC_SMART_COOLDOWN, config->smart_cooldown ? BST_CHECKED : BST_UNCHECKED);
+        // 顺序与 DoubleClickAction 的取值一致。
+        for (const wchar_t* text : {L"打开 CPA 管理页面", L"立即刷新额度"})
+            SendDlgItemMessageW(dlg, IDC_DOUBLE_CLICK, CB_ADDSTRING, 0, reinterpret_cast<LPARAM>(text));
+        SendDlgItemMessageW(dlg, IDC_DOUBLE_CLICK, CB_SETCURSEL, static_cast<WPARAM>(config->double_click), 0);
         SetDlgItemTextW(dlg, IDC_STATUS,
                         L"管理密钥即 CPA 配置中的 remote-management.secret-key。\r\n"
                         L"注意：CPA 对连续 5 次密钥错误会封禁 IP 30 分钟。");

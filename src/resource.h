@@ -16,3 +16,4 @@
 #define IDC_SHOW_COUNTDOWN      1012
 #define IDC_SKIP_TLS_VERIFY     1013
 #define IDC_SMART_COOLDOWN      1014
+#define IDC_DOUBLE_CLICK        1015

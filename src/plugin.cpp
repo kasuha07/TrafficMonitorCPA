@@ -62,7 +62,7 @@ QuotaItem::QuotaItem(Provider provider, WindowKind window, const wchar_t* name, 
 int QuotaItem::OnMouseEvent(MouseEventType type, int, int, void*, int)
 {
     if (type != MT_DBCLICKED) return 0;
-    CpaPlugin::Instance().OpenManagementPage();
+    CpaPlugin::Instance().OnItemDoubleClick();
     return 1;  // 已处理，主程序不再执行默认的双击动作
 }
 
@@ -338,6 +338,13 @@ void CpaPlugin::OnPluginCommand(int index, void*, void*)
     EnsureConfigLoaded();
     if (index == 0) StartFetchIfDue(true);
     else if (index == 1) OpenManagementPage();
+}
+
+void CpaPlugin::OnItemDoubleClick()
+{
+    EnsureConfigLoaded();
+    if (config_.double_click == DoubleClickAction::Refresh) StartFetchIfDue(true);
+    else OpenManagementPage();
 }
 
 void CpaPlugin::OpenManagementPage()
