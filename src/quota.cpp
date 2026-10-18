@@ -53,7 +53,7 @@ std::optional<json::Value> ParseObject(std::string_view body, std::string* error
     auto root = json::Parse(body, error);
     if (!root) return std::nullopt;
     if (root->IsString()) {
-        auto inner = json::Parse(*root->AsString(), error);
+        auto inner = json::Parse(root->StringView(), error);
         if (!inner) return std::nullopt;
         root = std::move(inner);
     }
@@ -308,11 +308,8 @@ std::optional<ApiCallResult> ParseApiCallResponse(std::string_view body, std::st
     }
     ApiCallResult r;
     r.status_code = static_cast<unsigned>(*status);
-    if (const json::Value* b = root->Find("body")) {
-        if (b->IsString()) {
-            r.body = b->AsString().value_or("");
-        }
-    }
+    // 上游响应体可能较大，直接取走解析出的字符串，不再复制。
+    if (json::Value* b = root->Find("body")) r.body = b->TakeString();
     return r;
 }
 

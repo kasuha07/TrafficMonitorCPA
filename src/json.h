@@ -27,6 +27,7 @@ public:
 
     // 对象成员查找；不存在或不是对象时返回 nullptr。
     const Value* Find(std::string_view key) const;
+    Value* Find(std::string_view key);
     // 按顺序尝试多个键（兼容 snake_case / camelCase）。
     const Value* FindAny(std::initializer_list<std::string_view> keys) const;
 
@@ -38,6 +39,10 @@ public:
     std::optional<double> AsNumber() const;
     // 字符串（去除首尾空白后非空）。
     std::optional<std::string> AsString() const;
+    // 原始字符串内容（不去除空白，不复制）；不是字符串时为空。
+    std::string_view StringView() const { return type_ == Type::String ? std::string_view(string_) : std::string_view(); }
+    // 取走原始字符串内容（不去除空白），避免复制较大的字符串；不是字符串时返回空串。
+    std::string TakeString() { return type_ == Type::String ? std::move(string_) : std::string(); }
 
 private:
     friend class Parser;

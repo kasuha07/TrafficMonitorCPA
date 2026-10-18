@@ -260,6 +260,11 @@ const Value* Value::Find(std::string_view key) const
     return nullptr;
 }
 
+Value* Value::Find(std::string_view key)
+{
+    return const_cast<Value*>(std::as_const(*this).Find(key));
+}
+
 const Value* Value::FindAny(std::initializer_list<std::string_view> keys) const
 {
     for (auto key : keys) {

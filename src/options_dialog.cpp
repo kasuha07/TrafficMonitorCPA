@@ -1,7 +1,10 @@
 #include "options_dialog.h"
 #include "i18n.h"
 
+#include <memory>
+#include <mutex>
 #include <string>
+#include <thread>
 
 #include "resource.h"
 
@@ -10,6 +13,23 @@ extern "C" IMAGE_DOS_HEADER __ImageBase;
 namespace cpa {
 
 namespace {
+
+// 后台连接测试完成后发给对话框的消息。
+constexpr UINT WM_TEST_DONE = WM_APP + 1;
+
+// 后台连接测试的结果。对话框与测试线程共同持有，对话框先关闭时线程仍可安全写入。
+struct TestJob
+{
+    std::mutex mutex;
+    bool done = false;
+    std::wstring result;
+};
+
+struct DialogState
+{
+    Config* config;
+    std::shared_ptr<TestJob> test;  // 正在进行的连接测试；没有时为空
+};
 
 std::wstring GetText(HWND dlg, int id)
 {
@@ -97,8 +117,8 @@ INT_PTR CALLBACK DialogProc(HWND dlg, UINT msg, WPARAM wp, LPARAM lp)
 {
     switch (msg) {
     case WM_INITDIALOG: {
-        auto* config = reinterpret_cast<Config*>(lp);
         SetWindowLongPtrW(dlg, DWLP_USER, lp);
+        Config* config = reinterpret_cast<DialogState*>(lp)->config;
         SetDlgItemTextW(dlg, IDC_URL, config->base_url.c_str());
         SetDlgItemTextW(dlg, IDC_KEY, config->management_key.c_str());
         SetDlgItemTextW(dlg, IDC_REFRESH, std::to_wstring(config->refresh_seconds).c_str());
@@ -137,24 +157,48 @@ INT_PTR CALLBACK DialogProc(HWND dlg, UINT msg, WPARAM wp, LPARAM lp)
                           L"Note: CPA bans the IP for 30 minutes after 5 wrong keys in a row."));
         return TRUE;
     }
+    case WM_TEST_DONE: {
+        auto* state = reinterpret_cast<DialogState*>(GetWindowLongPtrW(dlg, DWLP_USER));
+        if (!state || !state->test) return TRUE;
+        std::wstring result;
+        {
+            std::lock_guard lock(state->test->mutex);
+            if (!state->test->done) return TRUE;
+            result = std::move(state->test->result);
+        }
+        state->test.reset();
+        SetDlgItemTextW(dlg, IDC_STATUS, result.c_str());
+        EnableWindow(GetDlgItem(dlg, IDC_TEST), TRUE);
+        return TRUE;
+    }
     case WM_COMMAND:
         switch (LOWORD(wp)) {
         case IDC_PROXY_MODE:
             if (HIWORD(wp) == CBN_SELCHANGE) UpdateProxyEnabled(dlg);
             return TRUE;
         case IDC_TEST: {
+            auto* state = reinterpret_cast<DialogState*>(GetWindowLongPtrW(dlg, DWLP_USER));
+            if (state->test) return TRUE;
             Config probe;
             if (!ReadInputs(dlg, probe)) return TRUE;
             SetDlgItemTextW(dlg, IDC_STATUS, T(L"正在连接…", L"Connecting…"));
-            HCURSOR old = SetCursor(LoadCursorW(nullptr, IDC_WAIT));
-            UpdateWindow(dlg);
-            std::wstring result = TestConnection(probe);
-            SetCursor(old);
-            SetDlgItemTextW(dlg, IDC_STATUS, result.c_str());
+            EnableWindow(GetDlgItem(dlg, IDC_TEST), FALSE);
+            // 在后台线程测试，避免连接超时期间对话框无响应。
+            auto job = std::make_shared<TestJob>();
+            state->test = job;
+            std::thread([dlg, job, probe = std::move(probe)]() {
+                std::wstring result = TestConnection(probe);
+                {
+                    std::lock_guard lock(job->mutex);
+                    job->result = std::move(result);
+                    job->done = true;
+                }
+                PostMessageW(dlg, WM_TEST_DONE, 0, 0);
+            }).detach();
             return TRUE;
         }
         case IDOK: {
-            auto* config = reinterpret_cast<Config*>(GetWindowLongPtrW(dlg, DWLP_USER));
+            Config* config = reinterpret_cast<DialogState*>(GetWindowLongPtrW(dlg, DWLP_USER))->config;
             Config updated = *config;  // 保留对话框之外的字段
             if (!ReadInputs(dlg, updated)) return TRUE;
             *config = updated;
@@ -175,8 +219,9 @@ INT_PTR CALLBACK DialogProc(HWND dlg, UINT msg, WPARAM wp, LPARAM lp)
 bool ShowOptionsDialog(HWND parent, Config& config)
 {
     Config working = config;
+    DialogState state{&working, nullptr};
     INT_PTR r = DialogBoxParamW(reinterpret_cast<HINSTANCE>(&__ImageBase), MAKEINTRESOURCEW(IsEnglish() ? IDD_OPTIONS_EN : IDD_OPTIONS), parent,
-                                DialogProc, reinterpret_cast<LPARAM>(&working));
+                                DialogProc, reinterpret_cast<LPARAM>(&state));
     if (r != IDOK) return false;
     config = working;
     return true;

@@ -5,6 +5,7 @@
 #include <cctype>
 #include <ctime>
 #include <map>
+#include <memory>
 #include <mutex>
 #include <optional>
 #include <thread>
@@ -344,6 +345,37 @@ void FetchAccountQuota(HttpClient& http, AccountQuota& q, int64_t now)
 
 namespace {
 
+// 多次刷新之间复用同一个 WinHTTP 会话：保留空闲连接和代理自动发现的结果，
+// 不必每轮都重新做 TCP/TLS 握手。连接相关的设置改变时重新创建。
+std::shared_ptr<HttpClient> SharedClient(const Config& config)
+{
+    struct Entry
+    {
+        std::wstring base_url, key, proxy;
+        bool skip_tls_verify = false;
+        ProxyMode proxy_mode = ProxyMode::None;
+        std::shared_ptr<HttpClient> client;
+    };
+    static std::mutex mutex;
+    // 有意不释放：避免在 DLL 卸载（持有加载器锁）时关闭 WinHTTP 句柄。
+    static Entry* entry = new Entry();
+
+    std::lock_guard lock(mutex);
+    if (!entry->client || entry->base_url != config.base_url || entry->key != config.management_key ||
+        entry->proxy != config.proxy || entry->skip_tls_verify != config.skip_tls_verify ||
+        entry->proxy_mode != config.proxy_mode) {
+        entry->base_url = config.base_url;
+        entry->key = config.management_key;
+        entry->proxy = config.proxy;
+        entry->skip_tls_verify = config.skip_tls_verify;
+        entry->proxy_mode = config.proxy_mode;
+        // 旧会话由仍在使用它的请求持有，用完后自动关闭。
+        entry->client = std::make_shared<HttpClient>(config.base_url, config.management_key, 20000,
+                                                     config.skip_tls_verify, config.proxy_mode, config.proxy);
+    }
+    return entry->client;
+}
+
 const AccountQuota* FindPrevious(const Snapshot* previous, const Account& a)
 {
     if (!previous || !previous->ok) return nullptr;
@@ -369,8 +401,8 @@ Snapshot FetchSnapshot(const Config& config, const Snapshot* previous, bool forc
         return snap;
     }
 
-    HttpClient http(config.base_url, config.management_key, 20000, config.skip_tls_verify, config.proxy_mode,
-                    config.proxy);
+    const std::shared_ptr<HttpClient> client = SharedClient(config);
+    HttpClient& http = *client;
     CredentialsResult creds = FetchCredentials(http);
     if (!creds.ok) {
         // 网络抖动等临时故障：沿用上次数据，连续失败达到上限后再显示错误。密钥错误不沿用。

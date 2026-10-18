@@ -23,10 +23,11 @@ set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 # Static CRT: the DLL has no dependency on the VC++ redistributable.
 set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>")
 
-add_compile_definitions(UNICODE _UNICODE WIN32_LEAN_AND_MEAN NOMINMAX)
+# _USE_STD_VECTOR_ALGORITHMS=0: the STL's SIMD find/search helpers add ~25 KB and our strings are tiny.
+add_compile_definitions(UNICODE _UNICODE WIN32_LEAN_AND_MEAN NOMINMAX _USE_STD_VECTOR_ALGORITHMS=0)
 add_compile_options(
     "$<$<COMPILE_LANGUAGE:CXX>:/utf-8;/W4;/permissive-;/Zc:__cplusplus>"
-    "$<$<AND:$<COMPILE_LANGUAGE:CXX>,$<NOT:$<CONFIG:Debug>>>:/O1;/Gy;/GL>"
+    "$<$<AND:$<COMPILE_LANGUAGE:CXX>,$<NOT:$<CONFIG:Debug>>>:/O1;/Gy;/Gw;/GL>"
 )
 add_link_options("$<$<NOT:$<CONFIG:Debug>>:/LTCG;/OPT:REF;/OPT:ICF>")
 
