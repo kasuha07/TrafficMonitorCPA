@@ -26,6 +26,9 @@ struct Config
     // 任务栏数值后附带重置倒计时，如 "82% 4h"。
     bool show_countdown = false;
 
+    // 跳过 CPA 的 HTTPS 证书校验（自签名证书等）。只影响插件到 CPA 的连接。
+    bool skip_tls_verify = false;
+
     // 低额度提醒阈值（%）；0 表示关闭。
     unsigned alert_threshold = 10;
 

@@ -42,7 +42,7 @@ std::wstring LastErrorText(const wchar_t* what)
     case ERROR_WINHTTP_CANNOT_CONNECT: msg += L": 无法连接到 CPA"; break;
     case ERROR_WINHTTP_TIMEOUT: msg += L": 请求超时"; break;
     case ERROR_WINHTTP_NAME_NOT_RESOLVED: msg += L": 无法解析主机名"; break;
-    case ERROR_WINHTTP_SECURE_FAILURE: msg += L": TLS 错误"; break;
+    case ERROR_WINHTTP_SECURE_FAILURE: msg += L": TLS 证书校验失败（自签名证书可在选项中跳过校验）"; break;
     default: break;
     }
     return msg;
@@ -50,8 +50,9 @@ std::wstring LastErrorText(const wchar_t* what)
 
 } // namespace
 
-HttpClient::HttpClient(std::wstring base_url, std::wstring bearer_token, unsigned timeout_ms)
-    : base_url_(std::move(base_url)), token_(std::move(bearer_token)), timeout_ms_(timeout_ms)
+HttpClient::HttpClient(std::wstring base_url, std::wstring bearer_token, unsigned timeout_ms, bool skip_tls_verify)
+    : base_url_(std::move(base_url)), token_(std::move(bearer_token)), timeout_ms_(timeout_ms),
+      skip_tls_verify_(skip_tls_verify)
 {
     while (!base_url_.empty() && base_url_.back() == L'/') base_url_.pop_back();
     session_ = WinHttpOpen(L"CPAQuota", WINHTTP_ACCESS_TYPE_NO_PROXY,
@@ -114,6 +115,14 @@ HttpResponse HttpClient::Send(const wchar_t* method, std::wstring_view path, std
     if (!request.h) {
         resp.error = LastErrorText(L"WinHttpOpenRequest");
         return resp;
+    }
+    if (secure && skip_tls_verify_) {
+        DWORD flags = SECURITY_FLAG_IGNORE_UNKNOWN_CA | SECURITY_FLAG_IGNORE_CERT_DATE_INVALID |
+                      SECURITY_FLAG_IGNORE_CERT_CN_INVALID | SECURITY_FLAG_IGNORE_CERT_WRONG_USAGE;
+        if (!WinHttpSetOption(request.h, WINHTTP_OPTION_SECURITY_FLAGS, &flags, sizeof(flags))) {
+            resp.error = LastErrorText(L"WinHttpSetOption(SECURITY_FLAGS)");
+            return resp;
+        }
     }
 
     std::wstring headers = L"Accept: application/json\r\n";

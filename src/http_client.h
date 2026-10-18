@@ -17,7 +17,9 @@ struct HttpResponse
 class HttpClient
 {
 public:
-    HttpClient(std::wstring base_url, std::wstring bearer_token, unsigned timeout_ms = 20000);
+    // skip_tls_verify 为 true 时忽略 HTTPS 证书错误（自签名、过期、主机名不匹配），仅用于自建 CPA。
+    HttpClient(std::wstring base_url, std::wstring bearer_token, unsigned timeout_ms = 20000,
+               bool skip_tls_verify = false);
     ~HttpClient();
 
     HttpClient(const HttpClient&) = delete;
@@ -33,6 +35,7 @@ private:
     std::wstring base_url_;
     std::wstring token_;
     unsigned timeout_ms_;
+    bool skip_tls_verify_;
     void* session_ = nullptr;
 };
 

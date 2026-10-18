@@ -14,3 +14,4 @@
 #define IDC_ALERT               1010
 #define IDC_SHOW_USED           1011
 #define IDC_SHOW_COUNTDOWN      1012
+#define IDC_SKIP_TLS_VERIFY     1013

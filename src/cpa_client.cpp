@@ -340,7 +340,7 @@ Snapshot FetchSnapshot(const Config& config)
         return snap;
     }
 
-    HttpClient http(config.base_url, config.management_key);
+    HttpClient http(config.base_url, config.management_key, 20000, config.skip_tls_verify);
     CredentialsResult creds = FetchCredentials(http);
     if (!creds.ok) {
         snap.auth_rejected = creds.auth_rejected;
@@ -362,7 +362,7 @@ Snapshot FetchSnapshot(const Config& config)
 std::wstring TestConnection(const Config& config)
 {
     if (config.management_key.empty()) return L"请填写管理密钥";
-    HttpClient http(config.base_url, config.management_key, 10000);
+    HttpClient http(config.base_url, config.management_key, 10000, config.skip_tls_verify);
     CredentialsResult creds = FetchCredentials(http);
     if (!creds.ok) return creds.error;
 
