@@ -321,6 +321,49 @@ static void TestAlerts()
     CHECK(alerts.Check(accounts, 0, now).empty());
 }
 
+static void TestCooldown()
+{
+    const int64_t now = 1792324800;
+
+    // 5h 用尽：冷却到 5h 重置
+    AccountQuota a = MakeQuota(Provider::Codex, "a", 100, 40);
+    a.five_hour.reset_at = now + 3600;
+    a.weekly.reset_at = now + 86400;
+    CHECK(CooldownUntil(a, now) == now + 3600);
+
+    // 5h 与 7d 都用尽：冷却到较晚的 7d 重置
+    a.weekly.used_percent = 100;
+    CHECK(CooldownUntil(a, now) == now + 86400);
+
+    // 未用尽 / 重置时间未知 / 已过重置时间：不冷却
+    CHECK(CooldownUntil(MakeQuota(Provider::Codex, "b", 99, 0), now) == 0);
+    AccountQuota unknown = MakeQuota(Provider::Claude, "c", 100, 0);
+    CHECK(CooldownUntil(unknown, now) == 0);
+    unknown.five_hour.reset_at = now - 1;
+    CHECK(CooldownUntil(unknown, now) == 0);
+
+    // 获取失败的账号不冷却
+    a.ok = false;
+    CHECK(CooldownUntil(a, now) == 0);
+
+    // Antigravity：所有分组都用尽才冷却，取最早恢复的分组
+    AccountQuota ag = MakeQuota(Provider::Antigravity, "g", 0, 0);
+    ag.groups = {{"Gemini", {true, 100, now + 7200, false}, {true, 10, now + 86400, false}},
+                 {"Claude/GPT", {true, 0, now + 3600, false}, {true, 0, now + 86400, false}}};
+    CHECK(CooldownUntil(ag, now) == 0);
+    ag.groups[1].weekly.used_percent = 100;
+    CHECK(CooldownUntil(ag, now) == now + 7200);
+
+    // 重置投影
+    AccountQuota p = MakeQuota(Provider::Codex, "p", 100, 100);
+    p.five_hour.reset_at = now - 10;
+    p.weekly.reset_at = now + 10;
+    ProjectResets(p, now);
+    CHECK_NEAR(p.five_hour.RemainingPercent(), 100.0);
+    CHECK(p.five_hour.reset_at == 0);
+    CHECK_NEAR(p.weekly.RemainingPercent(), 0.0);
+}
+
 static void TestAggregate()
 {
     const std::vector<double> v = {80, -1, 20, 0.2, 50};
@@ -342,6 +385,7 @@ int main()
 {
     TestAggregate();
     TestAlerts();
+    TestCooldown();
     TestAntigravity();
     TestJson();
     TestIso8601();

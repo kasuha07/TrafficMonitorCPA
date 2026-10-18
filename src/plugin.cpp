@@ -206,8 +206,9 @@ void CpaPlugin::StartFetchIfDue(bool force)
     last_fetch_ = now;
     paused_ = false;
 
-    std::thread([this, config = config_, generation]() {
-        auto snapshot = std::make_shared<const Snapshot>(FetchSnapshot(config));
+    // 上一次的结果用于智能冷却；手动刷新（force）时忽略冷却。
+    std::thread([this, config = config_, generation, previous = shown_, force]() {
+        auto snapshot = std::make_shared<const Snapshot>(FetchSnapshot(config, previous.get(), force));
         std::lock_guard lock(mutex_);
         fetching_ = false;
         if (generation == generation_) pending_ = std::move(snapshot);
@@ -286,6 +287,7 @@ std::wstring CpaPlugin::BuildTooltip() const
             if (!q.ok) {
                 tip += L" 错误 " + q.error;
             } else if (p == Provider::Antigravity) {
+                if (q.cooled) tip += L" 冷却中";
                 for (const QuotaGroup& g : q.groups)
                     tip += L"\n    " + Utf8ToWide(g.name) + L": " + windows(g.five_hour, g.weekly);
             } else {
@@ -295,6 +297,7 @@ std::wstring CpaPlugin::BuildTooltip() const
                     tip += L" · 重置卡*" + std::to_wstring(rc.available);
                     if (rc.soonest_expiry > now) tip += L" (" + FormatDuration(rc.soonest_expiry - now) + L")";
                 }
+                if (q.cooled) tip += L" · 冷却中";
             }
         }
     }

@@ -26,6 +26,9 @@ struct Config
     // 任务栏数值后附带重置倒计时，如 "82% 4h"。
     bool show_countdown = false;
 
+    // 智能冷却：额度用尽的账号在重置前不再请求，沿用上次数据。
+    bool smart_cooldown = true;
+
     // 跳过 CPA 的 HTTPS 证书校验（自签名证书等）。只影响插件到 CPA 的连接。
     bool skip_tls_verify = false;
 
@@ -55,7 +58,8 @@ struct Snapshot
 };
 
 // 依次请求账号列表和每个账号的额度。同步阻塞，应在后台线程调用。
-Snapshot FetchSnapshot(const Config& config);
+// previous 为上一次的结果，用于智能冷却；force 为 true（手动刷新）时忽略冷却。
+Snapshot FetchSnapshot(const Config& config, const Snapshot* previous = nullptr, bool force = false);
 
 // 只请求账号列表，用于选项对话框的"测试连接"。
 std::wstring TestConnection(const Config& config);

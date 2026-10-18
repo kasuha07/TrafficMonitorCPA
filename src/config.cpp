@@ -93,6 +93,7 @@ Config LoadConfig(const std::wstring& ini_path)
     c.enable_antigravity = GetPrivateProfileIntW(kSection, L"EnableAntigravity", 0, ini_path.c_str()) != 0;
     UINT aggregate = GetPrivateProfileIntW(kSection, L"Aggregate", 0, ini_path.c_str());
     c.aggregate = aggregate <= 3 ? static_cast<AggregateMode>(aggregate) : AggregateMode::Min;
+    c.smart_cooldown = GetPrivateProfileIntW(kSection, L"SmartCooldown", 1, ini_path.c_str()) != 0;
     c.skip_tls_verify = GetPrivateProfileIntW(kSection, L"SkipTlsVerify", 0, ini_path.c_str()) != 0;
     c.show_used = GetPrivateProfileIntW(kSection, L"ShowUsed", 0, ini_path.c_str()) != 0;
     c.show_countdown = GetPrivateProfileIntW(kSection, L"ShowCountdown", 0, ini_path.c_str()) != 0;
@@ -122,7 +123,8 @@ bool SaveConfig(const std::wstring& ini_path, const Config& config, std::wstring
                                          ini_path.c_str()) &&
               WritePrivateProfileStringW(kSection, L"ShowUsed", flag(config.show_used), ini_path.c_str()) &&
               WritePrivateProfileStringW(kSection, L"ShowCountdown", flag(config.show_countdown), ini_path.c_str()) &&
-              WritePrivateProfileStringW(kSection, L"SkipTlsVerify", flag(config.skip_tls_verify), ini_path.c_str());
+              WritePrivateProfileStringW(kSection, L"SkipTlsVerify", flag(config.skip_tls_verify), ini_path.c_str()) &&
+              WritePrivateProfileStringW(kSection, L"SmartCooldown", flag(config.smart_cooldown), ini_path.c_str());
     if (!ok && error) *error = L"无法写入配置文件: " + ini_path;
     return ok;
 }

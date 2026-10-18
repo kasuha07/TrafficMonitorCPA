@@ -129,6 +129,53 @@ AggregateResult Aggregate(const std::vector<double>& remaining_percents, Aggrega
     return r;
 }
 
+namespace {
+
+// 窗口组在何时之前不可用；组内没有用尽的窗口时返回 0。
+int64_t GroupBlockedUntil(const QuotaWindow& five_hour, const QuotaWindow& weekly, int64_t now)
+{
+    int64_t until = 0;
+    for (const QuotaWindow* w : {&five_hour, &weekly}) {
+        double remaining = w->RemainingPercent();
+        if (remaining < 0 || remaining >= 0.5 || w->reset_at <= now) continue;
+        until = std::max(until, w->reset_at);
+    }
+    return until;
+}
+
+} // namespace
+
+int64_t CooldownUntil(const AccountQuota& q, int64_t now)
+{
+    if (!q.ok) return 0;
+    if (q.account.provider == Provider::Antigravity && !q.groups.empty()) {
+        int64_t earliest = 0;
+        for (const QuotaGroup& g : q.groups) {
+            int64_t until = GroupBlockedUntil(g.five_hour, g.weekly, now);
+            if (until == 0) return 0;  // 还有可用的分组，需要继续刷新
+            if (earliest == 0 || until < earliest) earliest = until;
+        }
+        return earliest;
+    }
+    return GroupBlockedUntil(q.five_hour, q.weekly, now);
+}
+
+void ProjectResets(AccountQuota& q, int64_t now)
+{
+    auto project = [now](QuotaWindow& w) {
+        if (w.present && w.reset_at > 0 && w.reset_at <= now) {
+            w.used_percent = 0;
+            w.reset_at = 0;
+        }
+    };
+    project(q.five_hour);
+    project(q.weekly);
+    for (QuotaGroup& g : q.groups) {
+        project(g.five_hour);
+        project(g.weekly);
+    }
+}
+
 std::string Account::DisplayName() const
 {
     if (!email.empty()) return email;

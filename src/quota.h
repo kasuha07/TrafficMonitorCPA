@@ -65,7 +65,17 @@ struct AccountQuota
     QuotaWindow weekly;
     std::vector<QuotaGroup> groups;   // 仅 Antigravity
     ResetCredits reset_credits;       // Codex / Claude
+    bool cooled = false;              // 本次因冷却未请求，沿用上次数据
 };
+
+// 智能冷却：账号额度用尽时，到重置前都不必再请求。
+// 每个「窗口组」（Codex/Claude 为 5h+7d 一组，Antigravity 为每个模型分组）若有用尽且已知重置时间的窗口，
+// 则该组在其中最晚的重置时间前不可用；所有组都不可用时，账号冷却到最早恢复的那一组。
+// 返回冷却截止时间（Unix 秒）；不需要冷却时返回 0。
+int64_t CooldownUntil(const AccountQuota& q, int64_t now);
+
+// 沿用旧数据时，把已过重置时间的窗口视为已重置（剩余 100%，下次重置时间未知）。
+void ProjectResets(AccountQuota& q, int64_t now);
 
 Provider ParseProvider(std::string_view raw);
 

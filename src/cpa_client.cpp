@@ -331,7 +331,21 @@ void FetchAccountQuota(HttpClient& http, AccountQuota& q, int64_t now)
 
 } // namespace
 
-Snapshot FetchSnapshot(const Config& config)
+namespace {
+
+const AccountQuota* FindPrevious(const Snapshot* previous, const Account& a)
+{
+    if (!previous || !previous->ok) return nullptr;
+    for (const AccountQuota& q : previous->accounts) {
+        if (q.account.provider == a.provider && q.account.auth_index == a.auth_index && q.account.name == a.name)
+            return &q;
+    }
+    return nullptr;
+}
+
+} // namespace
+
+Snapshot FetchSnapshot(const Config& config, const Snapshot* previous, bool force)
 {
     Snapshot snap;
     snap.fetched_at = static_cast<int64_t>(std::time(nullptr));
@@ -354,9 +368,23 @@ Snapshot FetchSnapshot(const Config& config)
 
     for (Account& a : creds.accounts) {
         if (a.disabled || !config.IsEnabled(a.provider)) continue;
+        const int64_t now = static_cast<int64_t>(std::time(nullptr));
+
+        if (config.smart_cooldown && !force) {
+            const AccountQuota* prev = FindPrevious(previous, a);
+            if (prev && CooldownUntil(*prev, now) > now) {
+                AccountQuota q = *prev;
+                q.account = std::move(a);  // 账号元数据（邮箱、备注等）用最新的
+                ProjectResets(q, now);
+                q.cooled = true;
+                snap.accounts.push_back(std::move(q));
+                continue;
+            }
+        }
+
         AccountQuota q;
         q.account = std::move(a);
-        FetchAccountQuota(http, q, static_cast<int64_t>(std::time(nullptr)));
+        FetchAccountQuota(http, q, now);
         snap.accounts.push_back(std::move(q));
     }
     snap.ok = true;
