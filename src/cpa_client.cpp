@@ -130,92 +130,89 @@ std::wstring UrlEncode(std::string_view s)
     return out;
 }
 
-// 账号列表里没有 project_id 时，读取凭证文件获取（与 Management Center 一致）。结果按账号缓存。
-std::string ResolveProjectId(HttpClient& http, const Account& a)
-{
-    if (!a.project_id.empty()) return a.project_id;
-
-    static std::mutex cache_mutex;
-    static std::map<std::string, std::string> cache;
-    std::string key = a.auth_index + "|" + a.name;
-    {
-        std::lock_guard lock(cache_mutex);
-        if (auto it = cache.find(key); it != cache.end()) return it->second;
-    }
-    if (a.name.empty()) return {};
-    HttpResponse r = http.Get(std::wstring(kDownloadPath) + UrlEncode(a.name));
-    if (!r.ok || r.status != 200) return {};
-    std::string id = ExtractProjectId(r.body);
-    if (!id.empty()) {
-        std::lock_guard lock(cache_mutex);
-        cache[key] = id;
-    }
-    return id;
-}
-
-// 按账号缓存很少变化的附加信息（套餐、重置卡），减少对上游的请求。
+// 按账号缓存很少变化的附加信息（套餐、重置卡等），减少对上游的请求。每条记录有各自的有效期。
 template <typename T>
 class TtlCache
 {
 public:
-    explicit TtlCache(int64_t ttl_seconds) : ttl_(ttl_seconds) {}
-
     std::optional<T> Get(const Account& a, int64_t now)
     {
         std::lock_guard lock(mutex_);
         auto it = entries_.find(Key(a));
-        if (it == entries_.end() || now - it->second.first >= ttl_) return std::nullopt;
+        if (it == entries_.end() || now >= it->second.first) return std::nullopt;
         return it->second.second;
     }
 
-    void Put(const Account& a, int64_t now, T value)
+    void Put(const Account& a, int64_t now, int64_t ttl_seconds, T value)
     {
         std::lock_guard lock(mutex_);
-        entries_[Key(a)] = {now, std::move(value)};
+        entries_[Key(a)] = {now + ttl_seconds, std::move(value)};
     }
 
 private:
     static std::string Key(const Account& a) { return a.auth_index + "|" + a.name; }
 
-    int64_t ttl_;
     std::mutex mutex_;
-    std::map<std::string, std::pair<int64_t, T>> entries_;
+    std::map<std::string, std::pair<int64_t, T>> entries_;  // 键 → (过期时间, 值)
 };
+
+// 可选信息查询失败（或结果无法识别）后，在这段时间内不再重试，避免每轮刷新都请求一次。
+constexpr int64_t kRetryAfterFailureSeconds = 600;
+// 套餐、重置卡等很少变化的信息，成功后半天内不再请求。
+constexpr int64_t kStableInfoSeconds = 12 * 3600;
+// 成功结果「永久」有效（直到插件重新加载）。
+constexpr int64_t kForeverSeconds = int64_t{1} << 40;
 
 int64_t Now()
 {
     return static_cast<int64_t>(std::time(nullptr));
 }
 
-// 套餐几乎不变，每个账号最多 1 小时查询一次；失败时不显示套餐，不影响额度。
+// 账号列表里没有 project_id 时，读取凭证文件获取（与 Management Center 一致）。结果按账号缓存。
+std::string ResolveProjectId(HttpClient& http, const Account& a)
+{
+    if (!a.project_id.empty()) return a.project_id;
+    if (a.name.empty()) return {};
+
+    static TtlCache<std::string> cache;
+    const int64_t now = Now();
+    if (auto cached = cache.Get(a, now)) return *cached;
+
+    HttpResponse r = http.Get(std::wstring(kDownloadPath) + UrlEncode(a.name));
+    std::string id = r.ok && r.status == 200 ? ExtractProjectId(r.body) : std::string();
+    cache.Put(a, now, id.empty() ? kRetryAfterFailureSeconds : kForeverSeconds, id);
+    return id;
+}
+
+// 套餐几乎不变，每个账号最多半天查询一次；失败时不显示套餐，不影响额度。
 std::string FetchAntigravityPlan(HttpClient& http, const Account& a, const Headers& headers)
 {
-    static TtlCache<std::string> cache(3600);
+    static TtlCache<std::string> cache;
     const int64_t now = Now();
     if (auto cached = cache.Get(a, now)) return *cached;
 
     std::string body;
     std::wstring error;
-    if (!CallUpstream(http, a, "POST", kAntigravityCodeAssistUrl, headers,
-                      R"({"metadata":{"ideType":"ANTIGRAVITY"}})", body, error))
-        return {};
-    std::string plan = ParseAntigravityPlan(body);
-    if (!plan.empty()) cache.Put(a, now, plan);
+    std::string plan;
+    if (CallUpstream(http, a, "POST", kAntigravityCodeAssistUrl, headers,
+                     R"({"metadata":{"ideType":"ANTIGRAVITY"}})", body, error))
+        plan = ParseAntigravityPlan(body);
+    cache.Put(a, now, plan.empty() ? kRetryAfterFailureSeconds : kStableInfoSeconds, plan);
     return plan;
 }
 
 // 同上，Claude 套餐来自 oauth/profile。
 std::string FetchClaudePlan(HttpClient& http, const Account& a, const Headers& headers)
 {
-    static TtlCache<std::string> cache(3600);
+    static TtlCache<std::string> cache;
     const int64_t now = Now();
     if (auto cached = cache.Get(a, now)) return *cached;
 
     std::string body;
     std::wstring error;
-    if (!CallUpstream(http, a, "GET", kClaudeProfileUrl, headers, {}, body, error)) return {};
-    std::string plan = ParseClaudePlan(body);
-    if (!plan.empty()) cache.Put(a, now, plan);
+    std::string plan;
+    if (CallUpstream(http, a, "GET", kClaudeProfileUrl, headers, {}, body, error)) plan = ParseClaudePlan(body);
+    cache.Put(a, now, plan.empty() ? kRetryAfterFailureSeconds : kStableInfoSeconds, plan);
     return plan;
 }
 
@@ -233,16 +230,22 @@ void FetchAntigravityQuota(HttpClient& http, AccountQuota& q)
     };
     std::string data = "{\"project\":" + json::Quote(project) + "}";
 
-    // 依次尝试多个端点，直到拿到可解析的额度。
+    // 依次尝试多个端点，直到拿到可解析的额度。上次成功的端点先试，不必每轮都先请求不可用的端点。
+    static TtlCache<size_t> working_endpoint;
+    constexpr size_t kEndpointCount = std::size(kAntigravityQuotaUrls);
+    const size_t first = working_endpoint.Get(q.account, Now()).value_or(0);
     std::wstring last_error;
-    for (const char* url : kAntigravityQuotaUrls) {
+    for (size_t n = 0; n < kEndpointCount; ++n) {
+        const size_t index = (first + n) % kEndpointCount;
         std::string body;
-        if (!CallUpstream(http, q.account, "POST", url, headers, data, body, last_error, &q.credential_invalid))
+        if (!CallUpstream(http, q.account, "POST", kAntigravityQuotaUrls[index], headers, data, body, last_error,
+                          &q.credential_invalid))
             continue;
         std::string err;
         if (ParseAntigravityQuota(body, q, &err)) {
             q.ok = true;
             q.credential_invalid = false;
+            if (index != first) working_endpoint.Put(q.account, Now(), kForeverSeconds, index);
             q.plan = FetchAntigravityPlan(http, q.account, headers);
             return;
         }
@@ -252,27 +255,38 @@ void FetchAntigravityQuota(HttpClient& http, AccountQuota& q)
 }
 
 // 重置卡明细是可选信息：失败时保留用量响应里的数量，不影响额度显示。
-void FetchCodexResetCredits(HttpClient& http, AccountQuota& q, Headers headers)
+// 明细很少变化，每个账号最多半天请求一次；期间数量仍以每轮用量响应里的为准，只沿用过期时间。
+void FetchCodexResetCredits(HttpClient& http, AccountQuota& q, Headers headers, int64_t now)
 {
+    static TtlCache<ResetCredits> cache;
+    if (auto cached = cache.Get(q.account, now)) {
+        if (q.reset_credits.available < 0) q.reset_credits.available = cached->available;
+        q.reset_credits.soonest_expiry = cached->soonest_expiry;
+        return;
+    }
+
     headers.emplace_back("Accept", "application/json");
     headers.emplace_back("OpenAI-Beta", "codex-1");
     headers.emplace_back("Originator", "Codex Desktop");
     std::string body;
     std::wstring error;
-    if (!CallUpstream(http, q.account, "GET", kCodexResetCreditsUrl, headers, {}, body, error)) return;
-
     ResetCredits detail;
     std::string err;
-    if (!ParseCodexResetCredits(body, detail, &err)) return;
-    if (detail.available >= 0) q.reset_credits.available = detail.available;
-    q.reset_credits.soonest_expiry = detail.soonest_expiry;
+    if (CallUpstream(http, q.account, "GET", kCodexResetCreditsUrl, headers, {}, body, error) &&
+        ParseCodexResetCredits(body, detail, &err)) {
+        if (detail.available >= 0) q.reset_credits.available = detail.available;
+        q.reset_credits.soonest_expiry = detail.soonest_expiry;
+        cache.Put(q.account, now, kStableInfoSeconds, detail);
+    } else {
+        cache.Put(q.account, now, kRetryAfterFailureSeconds, ResetCredits{});  // 失败时缓存「未知」
+    }
 }
 
 // Claude 重置卡复用用量接口（带 cedar_ember 参数），该接口容易被限流，
-// 且 grant 很少变化，所以每个账号最多 10 分钟请求一次，期间使用缓存。
+// 且 grant 很少变化，所以每个账号最多半天请求一次，期间使用缓存（用掉重置卡后数量最多滞后半天）。
 void FetchClaudeResetGrants(HttpClient& http, AccountQuota& q, const Headers& headers, int64_t now)
 {
-    static TtlCache<ResetCredits> cache(600);
+    static TtlCache<ResetCredits> cache;
     if (auto cached = cache.Get(q.account, now)) {
         q.reset_credits = *cached;
         return;
@@ -285,7 +299,7 @@ void FetchClaudeResetGrants(HttpClient& http, AccountQuota& q, const Headers& he
     std::string err;
     if (!ParseClaudeResetGrants(body, credits, &err)) return;
     q.reset_credits = credits;
-    cache.Put(q.account, now, credits);
+    cache.Put(q.account, now, kStableInfoSeconds, credits);
 }
 
 void FetchAccountQuota(HttpClient& http, AccountQuota& q, int64_t now)
@@ -334,7 +348,7 @@ void FetchAccountQuota(HttpClient& http, AccountQuota& q, int64_t now)
     q.ok = true;
 
     if (a.provider == Provider::Codex) {
-        FetchCodexResetCredits(http, q, headers);
+        FetchCodexResetCredits(http, q, headers, now);
     } else {
         FetchClaudeResetGrants(http, q, headers, now);
         if (q.plan.empty()) q.plan = FetchClaudePlan(http, a, headers);

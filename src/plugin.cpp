@@ -40,13 +40,23 @@ std::wstring FormatWindow(const QuotaWindow& w, const wchar_t* name, int64_t now
     return s;
 }
 
+// Unix 秒 → 本地时间 "HH:MM:SS"。用 Win32 转换而不是 localtime/wcsftime，少链接约 7 KB 的 CRT 代码。
 std::wstring FormatClock(int64_t t)
 {
-    std::tm tm{};
-    __time64_t tt = t;
-    if (_localtime64_s(&tm, &tt) != 0) return {};
-    wchar_t buf[16];
-    wcsftime(buf, std::size(buf), L"%H:%M:%S", &tm);
+    ULARGE_INTEGER u{};
+    u.QuadPart = (static_cast<uint64_t>(t) + 11644473600ull) * 10000000ull;  // 1601 年起的 100ns 计数
+    FILETIME ft{u.LowPart, u.HighPart};
+    SYSTEMTIME utc{}, local{};
+    if (t <= 0 || !FileTimeToSystemTime(&ft, &utc) || !SystemTimeToTzSpecificLocalTime(nullptr, &utc, &local))
+        return {};
+    const WORD parts[] = {local.wHour, local.wMinute, local.wSecond};
+    wchar_t buf[9];
+    for (int i = 0; i < 3; ++i) {
+        buf[i * 3] = static_cast<wchar_t>(L'0' + parts[i] / 10);
+        buf[i * 3 + 1] = static_cast<wchar_t>(L'0' + parts[i] % 10);
+        buf[i * 3 + 2] = L':';
+    }
+    buf[8] = L'\0';
     return buf;
 }
 

@@ -11,14 +11,14 @@
 | `G5h` / `G7d` | 所有 Antigravity 账号 **Gemini Models** 分组中 5 小时 / 7 天额度剩余百分比（默认取**最低**值，可在设置中改为平均 / 最高 / 可用账号数） |
 
 - 每个项目都带资源占用图（剩余比例）。
-- 鼠标提示列出每个账号的套餐、各窗口剩余百分比和重置倒计时，以及获取失败的原因。Claude 套餐（Team / Max / Pro / Free）来自 `oauth/profile`，每个账号最多 1 小时查询一次。
+- 鼠标提示列出每个账号的套餐、各窗口剩余百分比和重置倒计时，以及获取失败的原因。Claude 套餐（Team / Max / Pro / Free）来自 `oauth/profile`，每个账号最多 12 小时查询一次（查询失败 10 分钟后重试）。
 - Codex / Claude 账号有可用的额度重置卡时，提示中显示为「重置卡*数量 (最早一张的过期倒计时)」：
-  - Codex 来自 `wham/rate-limit-reset-credits`，该接口失败时退回用量响应中的数量。
-  - Claude 来自 `oauth/usage?cedar_ember=1` 的 reset grants，数量为各 grant 剩余次数之和；为避免触发限流，每个账号最多 10 分钟查询一次。
+  - Codex 来自 `wham/rate-limit-reset-credits`，每个账号最多 12 小时查询一次（期间数量仍取每轮用量响应中的值）；该接口失败时退回用量响应中的数量，10 分钟后重试。
+  - Claude 来自 `oauth/usage?cedar_ember=1` 的 reset grants，数量为各 grant 剩余次数之和；为避免触发限流，每个账号最多 12 小时查询一次（用掉重置卡后数量最多滞后 12 小时）。
 - 请求失败（网络抖动、上游 5xx / 限流等）时继续显示上次成功的数据，鼠标提示中标注「沿用 xx 前数据」及失败原因；同一账号连续失败 3 次后才显示错误。CPA 本身暂时连不上时同样处理；管理密钥错误不会沿用旧数据。
 - 双击任一显示项默认在浏览器中打开 `<CPA 地址>/management.html`，可在设置「双击显示项」中改为立即刷新额度（忽略智能冷却）。插件命令「打开 CPA 管理页面」始终可用。
 - 插件命令「立即刷新额度」可手动刷新。Codex 团队账号的次级窗口是月度额度，提示中显示为「30d」，任务栏上仍计入 `X7d`。
-- Antigravity 按模型分组计算额度（如 Gemini、Claude/GPT），鼠标提示中逐组列出；任务栏只汇总 Gemini 分组（没有该分组时取第一个分组）。账号后显示套餐（Free / Pro / Ultra / Ultra Lite，来自 `loadCodeAssist`，每个账号最多 1 小时查询一次）。
+- Antigravity 按模型分组计算额度（如 Gemini、Claude/GPT），鼠标提示中逐组列出；任务栏只汇总 Gemini 分组（没有该分组时取第一个分组）。账号后显示套餐（Free / Pro / Ultra / Ultra Lite，来自 `loadCodeAssist`，每个账号最多 12 小时查询一次）。
 
 ## 工作原理
 
